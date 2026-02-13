@@ -5,29 +5,58 @@ import "./App.css";
 const BACKEND = "https://moodflix-backend-kztp.onrender.com";
 
 function App() {
+
   const [query, setQuery] = useState("");
   const [data, setData] = useState(null);
   const [activeMovie, setActiveMovie] = useState(null);
   const [detailsCache, setDetailsCache] = useState({});
   const [showSplash, setShowSplash] = useState(true);
+  const [loading, setLoading] = useState(false);   // ✅ FIXED POSITION
 
   useEffect(() => {
-    setTimeout(() => setShowSplash(false), 2200);
+    const timer = setTimeout(() => setShowSplash(false), 2200);
+    return () => clearTimeout(timer);
   }, []);
+
+  /* =========================
+     SEARCH WITH LOADING
+  ========================= */
 
   const searchMovies = async () => {
     if (!query.trim()) return;
-    const res = await axios.post(`${BACKEND}/search`, { query });
-    setData(res.data);
+
+    try {
+      setLoading(true);
+
+      const res = await axios.post(`${BACKEND}/search`, { query });
+
+      setData(res.data);
+
+    } catch (err) {
+      console.error("Search error:", err);
+    } finally {
+      setTimeout(() => {
+        setLoading(false);
+      }, 500);
+    }
   };
+
+  /* =========================
+     INPUT
+  ========================= */
 
   const handleInput = (value) => {
     setQuery(value);
+
     if (!value.trim()) {
       setData(null);
       setActiveMovie(null);
     }
   };
+
+  /* =========================
+     MOVIE CLICK
+  ========================= */
 
   const handleClick = async (movie) => {
     if (!detailsCache[movie.id]) {
@@ -41,25 +70,37 @@ function App() {
     setActiveMovie(movie.id);
   };
 
+  /* =========================
+     ROW SCROLL
+  ========================= */
+
   const scrollRow = (id, dir) => {
-    document.getElementById(id).scrollBy({
+    const row = document.getElementById(id);
+    if (!row) return;
+
+    row.scrollBy({
       left: dir === "left" ? -900 : 900,
       behavior: "smooth"
     });
   };
+
+  /* =========================
+     RENDER ROW
+  ========================= */
 
   const renderRow = (title, movies, id) =>
     movies?.length > 0 && (
       <div className="row-section">
         <h2>{title}</h2>
         <div className="row-wrapper">
-          <button className="arrow left" onClick={()=>scrollRow(id,"left")}>‹</button>
+          <button className="arrow left" onClick={() => scrollRow(id, "left")}>‹</button>
+
           <div className="row" id={id}>
-            {movies.slice(0,30).map(movie => (
+            {movies.slice(0, 30).map(movie => (
               <div
                 key={movie.id}
                 className="card"
-                onClick={()=>handleClick(movie)}
+                onClick={() => handleClick(movie)}
               >
                 <img
                   src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
@@ -68,10 +109,15 @@ function App() {
               </div>
             ))}
           </div>
-          <button className="arrow right" onClick={()=>scrollRow(id,"right")}>›</button>
+
+          <button className="arrow right" onClick={() => scrollRow(id, "right")}>›</button>
         </div>
       </div>
     );
+
+  /* =========================
+     SPLASH SCREEN
+  ========================= */
 
   if (showSplash) {
     return (
@@ -81,9 +127,14 @@ function App() {
     );
   }
 
+  /* =========================
+     LANDING PAGE
+  ========================= */
+
   if (!data) {
     return (
       <div className="landing">
+
         <h1 className="logo">MoodFlix</h1>
         <p className="tagline">Cinema shaped by emotion.</p>
 
@@ -91,52 +142,66 @@ function App() {
           <input
             placeholder="How are you feeling today?"
             value={query}
-            onChange={(e)=>handleInput(e.target.value)}
+            onChange={(e) => handleInput(e.target.value)}
           />
           <button onClick={searchMovies}>Search</button>
         </div>
 
         <section className="about">
 
-  <div className="about-card">
-    <h1>About MoodFlix</h1>
+          <div className="about-card">
+            <h1>About MoodFlix</h1>
 
-    <h3>
-      MoodFlix reimagines how we discover films.
-      Instead of searching by title, genre, or actor,
-      it begins with something more human emotion.
-    </h3>
+            <h3>
+              MoodFlix reimagines how we discover films.
+              Instead of searching by title, genre, or actor,
+              it begins with something more human — emotion.
+            </h3>
 
-    <h3>
-      Whether you feel nostalgic, inspired, reflective,
-      adventurous, or simply curious,
-      MoodFlix intelligently maps your mood
-      to curated cinematic experiences
-      across multiple languages.
-    </h3>
-  </div>
+            <h3>
+              Whether you feel nostalgic, inspired, reflective,
+              adventurous, or curious,
+              MoodFlix maps your mood to curated cinematic
+              experiences across multiple languages.
+            </h3>
+          </div>
 
-  <div className="creator-card">
-    <div className="creator-image">
-      <img src="/myphoto.jpg" alt="Ishan Vaidya" />
-    </div>
+          <div className="creator-card">
+            <div className="creator-image">
+              <img src="/myphoto.jpg" alt="Ishan Vaidya" />
+            </div>
 
-    <div className="creator-info">
-      <h3>Ishan Vaidya</h3>
-      <span>Full Stack Developer • AI Enthusiast</span>
+            <div className="creator-info">
+              <h3>Ishan Vaidya</h3>
+              <span>Full Stack Developer • AI Enthusiast</span>
+              <p>
+                Passionate about building intelligent,
+                emotionally-aware digital systems that blend
+                design, data, and user psychology.
+              </p>
+            </div>
+          </div>
 
-      <p>
-        Passionate about building intelligent,
-        emotionally-aware digital systems that blend
-        design, data, and user psychology.
-      </p>
-    </div>
-  </div>
+        </section>
 
-</section>
+        {loading && (
+          <div className="loading-overlay">
+            <div className="loader">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <p>Finding the perfect movie for your mood...</p>
+          </div>
+        )}
+
       </div>
     );
   }
+
+  /* =========================
+     RESULTS PAGE
+  ========================= */
 
   return (
     <div className="app">
@@ -145,7 +210,7 @@ function App() {
         <input
           placeholder="Change your mood..."
           value={query}
-          onChange={(e)=>handleInput(e.target.value)}
+          onChange={(e) => handleInput(e.target.value)}
         />
         <button onClick={searchMovies}>Search</button>
       </div>
@@ -158,7 +223,8 @@ function App() {
 
       {activeMovie && detailsCache[activeMovie] && (
         <>
-          <div className="overlay" onClick={()=>setActiveMovie(null)} />
+          <div className="overlay" onClick={() => setActiveMovie(null)} />
+
           <div className="modal">
             {detailsCache[activeMovie].trailerKey && (
               <iframe
@@ -167,6 +233,7 @@ function App() {
                 title="Trailer"
               />
             )}
+
             <div className="modal-info">
               <h2>{detailsCache[activeMovie].title}</h2>
               <p>⭐ IMDb {detailsCache[activeMovie].vote_average}</p>
@@ -174,6 +241,17 @@ function App() {
             </div>
           </div>
         </>
+      )}
+
+      {loading && (
+        <div className="loading-overlay">
+          <div className="loader">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>Finding the perfect movie for your mood...</p>
+        </div>
       )}
 
     </div>
