@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/MoodFlix/static/css/main.e3569ef0.css",
+    "main.js": "/MoodFlix/static/js/main.5fb46e17.js",
+    "static/js/453.eca5f793.chunk.js": "/MoodFlix/static/js/453.eca5f793.chunk.js",
+    "index.html": "/MoodFlix/index.html",
+    "main.e3569ef0.css.map": "/MoodFlix/static/css/main.e3569ef0.css.map",
+    "main.5fb46e17.js.map": "/MoodFlix/static/js/main.5fb46e17.js.map",
+    "453.eca5f793.chunk.js.map": "/MoodFlix/static/js/453.eca5f793.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e3569ef0.css",
+    "static/js/main.5fb46e17.js"
+  ]
+}
