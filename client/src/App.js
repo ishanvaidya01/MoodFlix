@@ -168,7 +168,10 @@ function App() {
 
           <div className="creator-card">
             <div className="creator-image">
-              <img src="/myphoto.jpg" alt="Ishan Vaidya" />
+              <img 
+                src={process.env.PUBLIC_URL + "/myphoto.jpg"} 
+                alt="Ishan Vaidya"
+              />
             </div>
 
             <div className="creator-info">
