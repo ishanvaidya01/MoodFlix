@@ -18,7 +18,7 @@ function App() {
     setLoading(true);
 
     const res = await axios.post(
-      "/recommend",
+      "https://moodflix-backend.onrender.com/recommend",
       { mood, page: newPage }
     );
 
