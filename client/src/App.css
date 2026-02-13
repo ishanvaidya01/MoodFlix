@@ -1,3 +1,38 @@
+.splash {
+  height: 100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background:#000;
+}
+
+.logo {
+  font-size:4rem;
+  color:#e50914;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.hero-text {
+  text-align:center;
+  margin-top:40px;
+}
+
+.search-section button {
+  margin-left:10px;
+  padding:14px 20px;
+  border-radius:30px;
+  border:none;
+  background:#e50914;
+  color:white;
+  cursor:pointer;
+}
+
 body {
   margin: 0;
   background: #0c0c14;

@@ -6,39 +6,28 @@ const BACKEND = "https://moodflix-backend-kztp.onrender.com";
 
 function App() {
   const [query, setQuery] = useState("");
-  const [data, setData] = useState({});
+  const [data, setData] = useState({
+    hero: [],
+    english: [],
+    hindi: [],
+    tamil: [],
+    telugu: [],
+    marathi: []
+  });
   const [expanded, setExpanded] = useState(null);
   const [detailsCache, setDetailsCache] = useState({});
-  const [watchlist, setWatchlist] = useState(
-    JSON.parse(localStorage.getItem("watchlist")) || []
-  );
-
+  const [showSplash, setShowSplash] = useState(true);
   const debounceRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem("watchlist", JSON.stringify(watchlist));
-  }, [watchlist]);
+    setTimeout(() => setShowSplash(false), 3000);
+  }, []);
 
-  const searchMovies = async (value) => {
-    const res = await axios.post(`${BACKEND}/search`, { query: value });
+  const searchMovies = async () => {
+    if (!query.trim()) return;
+
+    const res = await axios.post(`${BACKEND}/search`, { query });
     setData(res.data);
-  };
-
-  const handleInput = (value) => {
-    setQuery(value);
-
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      if (value.trim()) searchMovies(value);
-    }, 600);
-  };
-
-  const toggleWatchlist = (movie) => {
-    if (watchlist.find(m => m.id === movie.id)) {
-      setWatchlist(watchlist.filter(m => m.id !== movie.id));
-    } else {
-      setWatchlist([...watchlist, movie]);
-    }
   };
 
   const handleHover = async (movie) => {
@@ -53,19 +42,28 @@ function App() {
     }));
   };
 
-  const scroll = (id, dir) => {
+  const scroll = (id, dir, e) => {
+    e.stopPropagation(); // FIX arrow triggering hover
     document.getElementById(id).scrollBy({
       left: dir === "left" ? -800 : 800,
       behavior: "smooth"
     });
   };
 
+  if (showSplash) {
+    return (
+      <div className="splash">
+        <h1 className="logo">MoodFlix</h1>
+      </div>
+    );
+  }
+
   const renderRow = (title, movies, id) =>
-    movies?.length > 0 && (
+    movies.length > 0 && (
       <div className="row-section">
         <h2>{title}</h2>
         <div className="row-wrapper">
-          <button className="arrow left" onClick={() => scroll(id,"left")}>‹</button>
+          <button className="arrow left" onClick={(e)=>scroll(id,"left",e)}>‹</button>
           <div className="row" id={id}>
             {movies.slice(0, 60).map(movie => {
               const details = detailsCache[movie.id];
@@ -82,33 +80,18 @@ function App() {
                     alt=""
                   />
 
-                  <button
-                    className="watch-btn"
-                    onClick={() => toggleWatchlist(movie)}
-                  >
-                    {watchlist.find(m => m.id === movie.id) ? "✓" : "+"}
-                  </button>
-
                   {expanded === movie.id && details && (
                     <div className="hover-card">
-                      {details.trailerKey && (
-                        <iframe
-                          src={`https://www.youtube.com/embed/${details.trailerKey}?autoplay=1&mute=1`}
-                          allow="autoplay"
-                          title="Trailer"
-                        />
-                      )}
-                      <div className="info">
-                        <h3>{details.title}</h3>
-                        <p>{details.overview.slice(0, 120)}...</p>
-                      </div>
+                      <h3>{details.title}</h3>
+                      <p>⭐ IMDb {details.vote_average}</p>
+                      <p>{details.overview.slice(0,120)}...</p>
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-          <button className="arrow right" onClick={() => scroll(id,"right")}>›</button>
+          <button className="arrow right" onClick={(e)=>scroll(id,"right",e)}>›</button>
         </div>
       </div>
     );
@@ -116,25 +99,18 @@ function App() {
   return (
     <div className="app">
 
-      {data.hero && (
-        <div className="hero">
-          <img
-            src={`https://image.tmdb.org/t/p/original${data.hero[0]?.backdrop_path}`}
-            alt=""
-          />
-          <div className="hero-overlay">
-            <h1>{data.hero[0]?.title}</h1>
-            <p>{data.hero[0]?.overview}</p>
-          </div>
-        </div>
-      )}
+      <div className="hero-text">
+        <h1>Tell us your mood.</h1>
+        <p>We’ll find the perfect movie for how you feel.</p>
+      </div>
 
       <div className="search-section">
         <input
-          placeholder="Search genre or mood..."
+          placeholder="Feeling sad? excited? nostalgic?"
           value={query}
-          onChange={(e) => handleInput(e.target.value)}
+          onChange={(e) => setQuery(e.target.value)}
         />
+        <button onClick={searchMovies}>Search</button>
       </div>
 
       {renderRow("English", data.english, "en")}
