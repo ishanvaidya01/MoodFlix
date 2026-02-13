@@ -1,0 +1,6 @@
+node_modules
+.env
+favorites.db
+movies.db
+client/node_modules
+client/build
