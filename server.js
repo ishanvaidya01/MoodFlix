@@ -109,7 +109,6 @@ app.get("/favorites", (req, res) => {
 });
 
 // Serve React build
-const path = require("path");
 
 app.use(express.static(path.join(__dirname, "build")));
 
