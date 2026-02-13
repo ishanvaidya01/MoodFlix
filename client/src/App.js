@@ -10,7 +10,8 @@ function App() {
   const [topRated, setTopRated] = useState([]);
   const [results, setResults] = useState([]);
   const [expanded, setExpanded] = useState(null);
-  const [details, setDetails] = useState(null);
+  const [detailsCache, setDetailsCache] = useState({});
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadInitial();
@@ -26,52 +27,65 @@ function App() {
   const searchMovies = async () => {
     if (!query.trim()) return;
 
+    setLoading(true);
     const res = await axios.post(`${BACKEND}/search`, { query });
     setResults(res.data);
+    setLoading(false);
   };
 
   const handleHover = async (movie) => {
     setExpanded(movie.id);
+
+    if (detailsCache[movie.id]) return;
+
     const res = await axios.get(`${BACKEND}/movie/${movie.id}`);
-    setDetails(res.data);
+
+    setDetailsCache(prev => ({
+      ...prev,
+      [movie.id]: res.data
+    }));
   };
 
   const renderGrid = (movies) => (
     <div className="grid">
-      {movies.map(movie => (
-        <div
-          key={movie.id}
-          className="card"
-          onMouseEnter={() => handleHover(movie)}
-          onMouseLeave={() => setExpanded(null)}
-        >
-          <img
-            src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
-            alt=""
-          />
+      {movies.map(movie => {
+        const details = detailsCache[movie.id];
 
-          {expanded === movie.id && details && (
-            <div className="hover-card">
-              {details.trailerKey && (
-                <iframe
-                  src={`https://www.youtube.com/embed/${details.trailerKey}?autoplay=1&mute=1`}
-                  allow="autoplay"
-                  title="Trailer"
-                />
-              )}
-              <div className="info">
-                <h3>{details.title}</h3>
-                <p>
-                  ⭐ {details.vote_average.toFixed(1)} / 10 |{" "}
-                  {details.original_language.toUpperCase()} |{" "}
-                  {details.release_date?.split("-")[0]}
-                </p>
-                <p>{details.overview.slice(0, 150)}...</p>
+        return (
+          <div
+            key={movie.id}
+            className="card"
+            onMouseEnter={() => handleHover(movie)}
+            onMouseLeave={() => setExpanded(null)}
+          >
+            <img
+              src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
+              alt=""
+            />
+
+            {expanded === movie.id && details && (
+              <div className="hover-card">
+                {details.trailerKey && (
+                  <iframe
+                    src={`https://www.youtube.com/embed/${details.trailerKey}?autoplay=1&mute=1`}
+                    allow="autoplay"
+                    title="Trailer"
+                  />
+                )}
+                <div className="info">
+                  <h3>{details.title}</h3>
+                  <p>
+                    ⭐ {details.vote_average.toFixed(1)} |{" "}
+                    {details.original_language.toUpperCase()} |{" "}
+                    {details.release_date?.split("-")[0]}
+                  </p>
+                  <p>{details.overview.slice(0, 150)}...</p>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      ))}
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 
@@ -92,7 +106,9 @@ function App() {
         </div>
       </div>
 
-      {results.length === 0 ? (
+      {loading && <h2 style={{textAlign:"center"}}>Loading...</h2>}
+
+      {!loading && results.length === 0 ? (
         <>
           <h2>Trending Movies</h2>
           {renderGrid(trending)}
