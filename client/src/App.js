@@ -1,200 +1,153 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import "./App.css";
 
 const BACKEND = "https://moodflix-backend-kztp.onrender.com";
 
 function App() {
-  const [mood, setMood] = useState("");
-  const [movies, setMovies] = useState([]);
-  const [favorites, setFavorites] = useState([]);
-  const [selectedMovie, setSelectedMovie] = useState(null);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [query, setQuery] = useState("");
+  const [language, setLanguage] = useState("");
+  const [type, setType] = useState("movie");
+  const [results, setResults] = useState([]);
+  const [featured, setFeatured] = useState(null);
+  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [viewFavorites, setViewFavorites] = useState(false);
-  const [toast, setToast] = useState("");
-  const observer = useRef();
 
-  useEffect(() => {
-    loadFavoritesCount();
-  }, []);
+  const languages = [
+    { label: "All", value: "" },
+    { label: "English", value: "en" },
+    { label: "Hindi", value: "hi" },
+    { label: "Tamil", value: "ta" },
+    { label: "Telugu", value: "te" },
+    { label: "Kannada", value: "kn" }
+  ];
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 3000);
-  };
-
-  const getMovies = async (newPage = 1, reset = false) => {
-    if (!mood.trim()) return;
-
+  const search = async () => {
     setLoading(true);
 
     const res = await axios.post(`${BACKEND}/recommend`, {
-      mood,
-      page: newPage
+      query,
+      language,
+      type
     });
 
-    const newMovies = res.data.movies;
-
-    if (reset) setMovies(newMovies);
-    else setMovies(prev => [...prev, ...newMovies]);
-
-    setTotalPages(res.data.total_pages);
-    setPage(newPage);
+    setResults(res.data.results);
+    setFeatured(res.data.results[0]);
     setLoading(false);
   };
 
-  const openMovie = async (id) => {
-    const res = await axios.get(`${BACKEND}/movie/${id}`);
-    setSelectedMovie(res.data);
+  const openDetails = async (id) => {
+    const res = await axios.get(`${BACKEND}/details/${type}/${id}`);
+    setSelected(res.data);
   };
 
-  const saveFavorite = async () => {
-    await axios.post(`${BACKEND}/favorite`, {
-      id: selectedMovie.id,
-      title: selectedMovie.title,
-      poster: selectedMovie.poster_path,
-      rating: selectedMovie.vote_average,
-      language: selectedMovie.original_language
-    });
-
-    showToast("Saved to Favorites ✨");
-    loadFavoritesCount();
-  };
-
-  const removeFavorite = async (id) => {
-    await axios.delete(`${BACKEND}/favorite/${id}`);
-    loadFavorites();
-    loadFavoritesCount();
-  };
-
-  const loadFavorites = async () => {
-    const res = await axios.get(`${BACKEND}/favorites`);
-    setFavorites(res.data);
-    setViewFavorites(true);
-  };
-
-  const loadFavoritesCount = async () => {
-    const res = await axios.get(`${BACKEND}/favorites`);
-    setFavorites(res.data);
-  };
-
-  // Infinite Scroll
-  const lastMovieRef = (node) => {
-    if (loading) return;
-    if (observer.current) observer.current.disconnect();
-
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && page < totalPages && !viewFavorites) {
-        getMovies(page + 1);
-      }
-    });
-
-    if (node) observer.current.observe(node);
-  };
-
-  const trailer =
-    selectedMovie?.videos?.results?.find(
-      v => v.type === "Trailer" && v.site === "YouTube"
-    );
+  useEffect(() => {
+    search();
+  }, [language, type]);
 
   return (
     <div className="app">
-      <header className="header">
-        <h1>MoodFlix</h1>
-        <div className="subtitle">
-        An AI that understands your mood and curates cinema.
+
+      <div className="navbar">
+        <div className="logo">MoodFlix AI</div>
+
+        <div className="search-container">
+          <input
+            placeholder="Describe what you feel..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && search()}
+          />
+          <button onClick={search}>Search</button>
         </div>
-        <div className="fav-count">❤️ {favorites.length}</div>
-      </header>
 
-      <div className="controls">
-        <input
-          placeholder="Enter your mood..."
-          value={mood}
-          onChange={(e) => setMood(e.target.value)}
-        />
-        <button onClick={() => { setViewFavorites(false); getMovies(1, true); }}>
-          Discover
-        </button>
-        <button className="fav-btn" onClick={loadFavorites}>
-          Favorites
-        </button>
+        <select onChange={(e) => setLanguage(e.target.value)}>
+          {languages.map(l => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+
+        <div className="toggle">
+          <button
+            className={type === "movie" ? "active" : ""}
+            onClick={() => setType("movie")}
+          >
+            Movies
+          </button>
+          <button
+            className={type === "tv" ? "active" : ""}
+            onClick={() => setType("tv")}
+          >
+            Web Series
+          </button>
+        </div>
       </div>
 
-      {loading && <div className="loader"></div>}
-
-      <div className="grid">
-        {(viewFavorites ? favorites : movies).map((movie, index) => {
-          const isLast = index === movies.length - 1;
-          return (
-            <div
-              ref={!viewFavorites && isLast ? lastMovieRef : null}
-              className="card"
-              key={movie.id}
-              onClick={() => openMovie(movie.id)}
-            >
-              <img
-                src={`https://image.tmdb.org/t/p/w500${movie.poster || movie.poster_path}`}
-                alt={movie.title}
-              />
-              <div className="card-overlay">
-                <h3>{movie.title}</h3>
-                <div className="meta">
-                  ⭐ {movie.vote_average || movie.rating}
-                  <span>{movie.original_language || movie.language}</span>
-                </div>
-                <div className="confidence">
-                  <div
-                    className="confidence-bar"
-                    style={{ width: `${(movie.vote_average || movie.rating) * 10}%` }}
-                  />
-                </div>
-                {viewFavorites && (
-                  <button
-                    className="remove-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFavorite(movie.id);
-                    }}
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {selectedMovie && (
-        <div className="modal">
-          <div className="modal-content">
-            <span className="close" onClick={() => setSelectedMovie(null)}>×</span>
-            <h2>{selectedMovie.title}</h2>
-            <p>{selectedMovie.overview}</p>
-            <p>⭐ IMDb: {selectedMovie.vote_average}</p>
-            <p>Language: {selectedMovie.original_language}</p>
-
-            {trailer && (
-              <iframe
-                title="Trailer"
-                width="100%"
-                height="400"
-                src={`https://www.youtube.com/embed/${trailer.key}`}
-                allowFullScreen
-              />
-            )}
-
-            <button className="save-btn" onClick={saveFavorite}>
-              Save to Favorites
+      {featured && (
+        <div
+          className="hero"
+          style={{
+            backgroundImage: `url(https://image.tmdb.org/t/p/original${featured.backdrop_path})`
+          }}
+        >
+          <div className="hero-content">
+            <h1>{featured.title || featured.name}</h1>
+            <p>⭐ {featured.vote_average.toFixed(1)} / 10</p>
+            <button onClick={() => openDetails(featured.id)}>
+              Explore
             </button>
           </div>
         </div>
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {loading && <div className="loader"></div>}
+
+      <div className="grid">
+        {results.map(item => (
+          <div
+            key={item.id}
+            className="card"
+            onClick={() => openDetails(item.id)}
+          >
+            <img
+              src={`https://image.tmdb.org/t/p/w500${item.poster_path}`}
+              alt=""
+            />
+            <div className="rating">
+              {item.vote_average.toFixed(1)} / 10
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {selected && (
+        <div className="modal">
+          <div className="modal-content">
+            <span onClick={() => setSelected(null)}>×</span>
+            <h2>{selected.title || selected.name}</h2>
+            <p>{selected.overview}</p>
+
+            <div className="providers">
+              {selected.watchProviders?.map(p => (
+                <a
+                  key={p.provider_id}
+                  href={`https://www.google.com/search?q=watch+${selected.title}+on+${p.provider_name}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <img
+                    src={`https://image.tmdb.org/t/p/w200${p.logo_path}`}
+                    alt=""
+                  />
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -1,120 +1,103 @@
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
-const sqlite3 = require("sqlite3").verbose();
 require("dotenv").config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const db = new sqlite3.Database("./favorites.db");
-
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS favorites (
-      id INTEGER PRIMARY KEY,
-      title TEXT,
-      poster TEXT,
-      rating REAL,
-      language TEXT,
-      type TEXT
-    )
-  `);
-});
-
 const TMDB = "https://api.themoviedb.org/3";
 const API_KEY = process.env.TMDB_KEY;
 
-/* -------------------- MOOD → GENRE MAP -------------------- */
-
 const moodGenres = {
-  happy: [35, 10751, 12],           // Comedy, Family, Adventure
-  sad: [18, 10749],                 // Drama, Romance
+  happy: [35, 10751, 12],
+  sad: [18, 10749],
   romantic: [10749, 18],
   horror: [27],
-  action: [28, 53],                 // Action + Thriller
-  thriller: [53, 9648],             // Thriller + Mystery
-  adventure: [12, 14]               // Adventure + Fantasy
+  action: [28, 53],
+  thriller: [53, 9648],
+  adventure: [12, 14]
 };
 
-/* -------------------- HEALTH -------------------- */
-
 app.get("/", (req, res) => {
-  res.send("MoodFlix 2.0 Backend Running");
+  res.send("MoodFlix AI Engine Running");
 });
 
-/* -------------------- RECOMMEND -------------------- */
-
 app.post("/recommend", async (req, res) => {
-  const {
-    mood,
-    language = "",
-    type = "movie"
-  } = req.body;
-
-  if (!mood) {
-    return res.status(400).json({ error: "Mood required" });
-  }
-
-  const genres = moodGenres[mood.toLowerCase()] || [18];
-
-  const randomPage = Math.floor(Math.random() * 20) + 1;
-  const sortOptions = [
-    "popularity.desc",
-    "vote_average.desc",
-    "vote_count.desc",
-    "release_date.desc"
-  ];
-
-  const randomSort =
-    sortOptions[Math.floor(Math.random() * sortOptions.length)];
+  const { query = "", language = "", type = "movie" } = req.body;
 
   try {
-    const response = await axios.get(
-      `${TMDB}/discover/${type}`,
-      {
+    // 1️⃣ Try smart search first
+    if (query.trim()) {
+      const searchRes = await axios.get(`${TMDB}/search/multi`, {
         params: {
           api_key: API_KEY,
-          with_genres: genres.join(","),
-          with_original_language: language || undefined,
-          sort_by: randomSort,
-          page: randomPage,
-          "vote_count.gte": 100
+          query,
+          include_adult: false,
+          page: 1
         }
+      });
+
+      let results = searchRes.data.results.filter(
+        item =>
+          item.media_type === type &&
+          (language ? item.original_language === language : true)
+      );
+
+      if (results.length > 0) {
+        return res.json({ results });
+      }
+
+      // 2️⃣ Fallback to mood-based genre
+      const moodKey = query.toLowerCase();
+      if (moodGenres[moodKey]) {
+        const discoverRes = await axios.get(
+          `${TMDB}/discover/${type}`,
+          {
+            params: {
+              api_key: API_KEY,
+              with_genres: moodGenres[moodKey].join(","),
+              with_original_language: language || undefined,
+              sort_by: "popularity.desc",
+              vote_count_gte: 200,
+              page: Math.floor(Math.random() * 10) + 1
+            }
+          }
+        );
+        return res.json({ results: discoverRes.data.results });
+      }
+    }
+
+    // 3️⃣ Default fallback = trending
+    const trendingRes = await axios.get(
+      `${TMDB}/trending/${type}/week`,
+      {
+        params: { api_key: API_KEY }
       }
     );
 
-    res.json({
-      results: response.data.results
-    });
+    res.json({ results: trendingRes.data.results });
 
   } catch (err) {
     res.status(500).json({ error: "Recommendation failed" });
   }
 });
 
-/* -------------------- DETAILS + OTT -------------------- */
-
 app.get("/details/:type/:id", async (req, res) => {
   const { type, id } = req.params;
 
   try {
-    const details = await axios.get(
-      `${TMDB}/${type}/${id}`,
-      {
-        params: {
-          api_key: API_KEY,
-          append_to_response: "videos"
-        }
+    const details = await axios.get(`${TMDB}/${type}/${id}`, {
+      params: {
+        api_key: API_KEY,
+        append_to_response: "videos"
       }
-    );
+    });
 
     const providers = await axios.get(
       `${TMDB}/${type}/${id}/watch/providers`,
-      {
-        params: { api_key: API_KEY }
-      }
+      { params: { api_key: API_KEY } }
     );
 
     const indiaProviders =
@@ -126,40 +109,11 @@ app.get("/details/:type/:id", async (req, res) => {
     });
 
   } catch {
-    res.status(500).json({ error: "Details fetch failed" });
+    res.status(500).json({ error: "Details failed" });
   }
 });
 
-/* -------------------- FAVORITES -------------------- */
-
-app.post("/favorite", (req, res) => {
-  const { id, title, poster, rating, language, type } = req.body;
-
-  db.run(
-    `INSERT OR IGNORE INTO favorites 
-     (id, title, poster, rating, language, type)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, title, poster, rating, language, type]
-  );
-
-  res.json({ success: true });
-});
-
-app.get("/favorites", (req, res) => {
-  db.all("SELECT * FROM favorites", [], (err, rows) => {
-    res.json(rows);
-  });
-});
-
-app.delete("/favorite/:id", (req, res) => {
-  db.run("DELETE FROM favorites WHERE id = ?", [req.params.id]);
-  res.json({ success: true });
-});
-
-/* -------------------- SERVER -------------------- */
-
 const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`MoodFlix backend running on ${PORT}`);
-});
+app.listen(PORT, () =>
+  console.log(`MoodFlix AI running on ${PORT}`)
+);
