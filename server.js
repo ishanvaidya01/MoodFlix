@@ -10,14 +10,31 @@ app.use(express.json());
 const TMDB = "https://api.themoviedb.org/3";
 const API_KEY = process.env.TMDB_KEY;
 
-/* SEARCH */
+/* TRENDING */
+app.get("/trending", async (req, res) => {
+  const response = await axios.get(`${TMDB}/trending/movie/week`, {
+    params: { api_key: API_KEY }
+  });
 
-app.post("/recommend", async (req, res) => {
+  res.json(response.data.results);
+});
+
+/* TOP RATED */
+app.get("/top-rated", async (req, res) => {
+  const response = await axios.get(`${TMDB}/movie/top_rated`, {
+    params: { api_key: API_KEY }
+  });
+
+  res.json(response.data.results);
+});
+
+/* SEARCH (GENRE + TEXT BASED) */
+app.post("/search", async (req, res) => {
   const { query = "", page = 1 } = req.body;
 
   try {
     if (!query.trim()) {
-      return res.json({ results: [], total_pages: 1 });
+      return res.json({ results: [] });
     }
 
     const response = await axios.get(`${TMDB}/search/movie`, {
@@ -30,22 +47,18 @@ app.post("/recommend", async (req, res) => {
     });
 
     const results = response.data.results
-      .filter(m => m.poster_path && m.vote_count > 50)
+      .filter(m => m.poster_path && m.vote_count > 20)
       .sort((a, b) => b.vote_average - a.vote_average)
-      .slice(0, 36);
+      .slice(0, 60);
 
-    res.json({
-      results,
-      total_pages: response.data.total_pages
-    });
+    res.json(results);
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Search failed" });
   }
 });
 
 /* FULL MOVIE DETAILS */
-
 app.get("/movie/:id", async (req, res) => {
   try {
     const response = await axios.get(

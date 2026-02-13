@@ -5,19 +5,10 @@ body {
   color: white;
 }
 
-.app {
-  max-width: 1500px;
-  margin: auto;
-  transition: filter 0.3s ease;
-}
-
-.focus-mode .grid {
-  filter: blur(6px) brightness(0.5);
-}
-
 .search-section {
   text-align: center;
   padding: 80px 20px 40px;
+  animation: fadeIn 1s ease;
 }
 
 .search-box {
@@ -46,70 +37,52 @@ body {
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 30px;
+  gap: 25px;
   padding: 40px;
 }
 
 .card {
   position: relative;
-  overflow: visible;
+  transition: transform 0.3s ease;
 }
 
 .card img {
   width: 100%;
   border-radius: 12px;
-  transition: transform 0.3s ease;
 }
 
-.card:hover img {
+.card:hover {
   transform: scale(1.05);
 }
 
-.expanded-card {
+.hover-card {
   position: absolute;
-  top: -60px;
-  width: 420px;
-  height: 520px;
+  top: -50px;
+  left: 0;
+  width: 400px;
   background: #111;
-  border-radius: 16px;
-  z-index: 20;
-  box-shadow: 0 25px 70px rgba(0,0,0,0.8);
-  overflow: hidden;
+  border-radius: 15px;
+  z-index: 10;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
   animation: popIn 0.3s ease;
 }
 
-.expanded-card.right { left: 0; }
-.expanded-card.center { left: -110px; }
-.expanded-card.left { right: 0; }
-
-.expanded-card iframe {
+.hover-card iframe {
   width: 100%;
-  height: 55%;
+  height: 220px;
 }
 
-.expanded-info {
+.info {
   padding: 15px;
-}
-
-.meta {
-  display: flex;
-  gap: 12px;
-  margin: 10px 0;
   font-size: 0.9rem;
-}
-
-.rating-badge {
-  background: #e50914;
-  padding: 3px 8px;
-  border-radius: 5px;
-}
-
-.overview {
-  font-size: 0.85rem;
-  opacity: 0.85;
 }
 
 @keyframes popIn {
   from { transform: scale(0.9); opacity: 0 }
   to { transform: scale(1); opacity: 1 }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0 }
+  to { opacity: 1 }
 }
