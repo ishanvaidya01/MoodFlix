@@ -10,21 +10,36 @@ app.use(express.json());
 const TMDB = "https://api.themoviedb.org/3";
 const API_KEY = process.env.TMDB_KEY;
 
-/* Helper: Fetch Multiple Pages */
-async function fetchMultiplePages(url, params, pages = 3) {
-  let allResults = [];
+/* ===============================
+   HEALTH ROUTE
+================================= */
+app.get("/", (req, res) => {
+  res.json({ status: "MoodFlix backend running" });
+});
 
-  for (let i = 1; i <= pages; i++) {
-    const res = await axios.get(url, {
-      params: { ...params, page: i }
-    });
-    allResults = [...allResults, ...res.data.results];
-  }
+/* ===============================
+   CACHE SYSTEM
+================================= */
+const cache = new Map();
+const CACHE_TTL = 1000 * 60 * 30;
 
-  return allResults;
+function setCache(key, data) {
+  cache.set(key, { data, expiry: Date.now() + CACHE_TTL });
 }
 
-/* Get Genre List */
+function getCache(key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiry) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+/* ===============================
+   GENRES
+================================= */
 let genreMap = {};
 
 async function loadGenres() {
@@ -39,86 +54,112 @@ async function loadGenres() {
 
 loadGenres();
 
-/* TRENDING */
-app.get("/trending", async (req, res) => {
-  const results = await fetchMultiplePages(
-    `${TMDB}/trending/movie/week`,
-    { api_key: API_KEY },
-    4
-  );
+/* ===============================
+   BULK FETCH
+================================= */
+async function fetchBulk(url, params, pages = 5) {
+  let results = [];
 
-  res.json(results);
-});
+  for (let i = 1; i <= pages; i++) {
+    const res = await axios.get(url, {
+      params: { ...params, page: i }
+    });
 
-/* TOP RATED */
-app.get("/top-rated", async (req, res) => {
-  const results = await fetchMultiplePages(
-    `${TMDB}/movie/top_rated`,
-    { api_key: API_KEY },
-    4
-  );
-
-  res.json(results);
-});
-
-/* SEARCH */
-app.post("/search", async (req, res) => {
-  const { query = "" } = req.body;
-
-  if (!query.trim()) {
-    return res.json([]);
+    results.push(...res.data.results);
   }
 
+  return results;
+}
+
+/* ===============================
+   RANKING
+================================= */
+function rankMovies(movies) {
+  return movies
+    .filter(m => m.poster_path)
+    .sort((a, b) => {
+      const scoreA =
+        a.vote_average * Math.log(a.vote_count + 50);
+      const scoreB =
+        b.vote_average * Math.log(b.vote_count + 50);
+
+      return scoreB - scoreA;
+    });
+}
+
+/* ===============================
+   SEARCH
+================================= */
+app.post("/search", async (req, res) => {
+  const { query = "" } = req.body;
+  const lower = query.toLowerCase();
+
+  if (!lower.trim()) {
+    return res.json({
+      hero: [],
+      english: [],
+      hindi: [],
+      tamil: [],
+      telugu: [],
+      marathi: []
+    });
+  }
+
+  const cached = getCache(lower);
+  if (cached) return res.json(cached);
+
   try {
-    const lowerQuery = query.toLowerCase();
+    let movies = [];
 
-    let results = [];
-
-    /* If query matches a genre */
-    if (genreMap[lowerQuery]) {
-      results = await fetchMultiplePages(
+    if (genreMap[lower]) {
+      movies = await fetchBulk(
         `${TMDB}/discover/movie`,
         {
           api_key: API_KEY,
-          with_genres: genreMap[lowerQuery],
-          sort_by: "vote_average.desc",
-          "vote_count.gte": 100
+          with_genres: genreMap[lower],
+          "vote_count.gte": 50
         },
-        5
+        6
       );
     } else {
-      /* Normal Search */
-      results = await fetchMultiplePages(
+      movies = await fetchBulk(
         `${TMDB}/search/movie`,
         {
           api_key: API_KEY,
-          query,
+          query: lower,
           include_adult: false
         },
         4
       );
-
-      /* Sort better movies first */
-      results.sort((a, b) => {
-        const scoreA = a.vote_average * Math.log(a.vote_count + 1);
-        const scoreB = b.vote_average * Math.log(b.vote_count + 1);
-        return scoreB - scoreA;
-      });
     }
 
-    const cleaned = results
-      .filter(m => m.poster_path)
-      .slice(0, 150);
+    const ranked = rankMovies(movies);
 
-    res.json(cleaned);
+    const response = {
+      hero: ranked.slice(0, 5),
+      english: ranked.filter(m => m.original_language === "en"),
+      hindi: ranked.filter(m => m.original_language === "hi"),
+      tamil: ranked.filter(m => m.original_language === "ta"),
+      telugu: ranked.filter(m => m.original_language === "te"),
+      marathi: ranked.filter(m => m.original_language === "mr")
+    };
+
+    setCache(lower, response);
+    res.json(response);
 
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Search failed" });
   }
 });
 
-/* MOVIE DETAILS */
+/* ===============================
+   DETAILS
+================================= */
 app.get("/movie/:id", async (req, res) => {
+  const cached = getCache(req.params.id);
+  if (cached) return res.json(cached);
+
   try {
     const response = await axios.get(
       `${TMDB}/movie/${req.params.id}`,
@@ -134,13 +175,17 @@ app.get("/movie/:id", async (req, res) => {
       v => v.type === "Trailer" && v.site === "YouTube"
     );
 
-    res.json({
+    const data = {
       ...response.data,
       trailerKey: trailer ? trailer.key : null
-    });
+    };
 
-  } catch {
-    res.status(500).json({ error: "Details fetch failed" });
+    setCache(req.params.id, data);
+    res.json(data);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Details failed" });
   }
 });
 
