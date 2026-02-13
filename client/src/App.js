@@ -18,7 +18,7 @@ function App() {
     setLoading(true);
 
     const res = await axios.post(
-      "https://moodflix-backend.onrender.com/recommend",
+      "https://moodflix-backend-kztp.onrender.com/recommend",
       { mood, page: newPage }
     );
 
@@ -35,12 +35,12 @@ function App() {
   };
 
   const openMovie = async (id) => {
-    const res = await axios.get(`http://localhost:5000/movie/${id}`);
+    const res = await axios.get(`https://moodflix-backend-kztp.onrender.com/movie/${id}`);
     setSelectedMovie(res.data);
   };
 
   const saveFavorite = async () => {
-    await axios.post("http://localhost:5000/favorite", {
+    await axios.post("https://moodflix-backend-kztp.onrender.com/favorite", {
       id: selectedMovie.id,
       title: selectedMovie.title,
       poster: selectedMovie.poster_path,
@@ -52,12 +52,12 @@ function App() {
   };
 
   const removeFavorite = async (id) => {
-    await axios.delete(`http://localhost:5000/favorite/${id}`);
+    await axios.delete(`https://moodflix-backend-kztp.onrender.com/favorite/${id}`);
     loadFavorites();
   };
 
   const loadFavorites = async () => {
-    const res = await axios.get("http://localhost:5000/favorites");
+    const res = await axios.get("https://moodflix-backend-kztp.onrender.com/favorites");
     setFavorites(res.data);
     setViewFavorites(true);
   };
