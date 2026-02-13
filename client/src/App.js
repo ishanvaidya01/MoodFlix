@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./App.css";
 
@@ -6,31 +6,39 @@ const BACKEND = "https://moodflix-backend-kztp.onrender.com";
 
 function App() {
   const [query, setQuery] = useState("");
-  const [trending, setTrending] = useState([]);
-  const [topRated, setTopRated] = useState([]);
-  const [results, setResults] = useState([]);
+  const [data, setData] = useState({});
   const [expanded, setExpanded] = useState(null);
   const [detailsCache, setDetailsCache] = useState({});
-  const [loading, setLoading] = useState(false);
+  const [watchlist, setWatchlist] = useState(
+    JSON.parse(localStorage.getItem("watchlist")) || []
+  );
+
+  const debounceRef = useRef(null);
 
   useEffect(() => {
-    loadInitial();
-  }, []);
+    localStorage.setItem("watchlist", JSON.stringify(watchlist));
+  }, [watchlist]);
 
-  const loadInitial = async () => {
-    const trendingRes = await axios.get(`${BACKEND}/trending`);
-    const topRatedRes = await axios.get(`${BACKEND}/top-rated`);
-    setTrending(trendingRes.data);
-    setTopRated(topRatedRes.data);
+  const searchMovies = async (value) => {
+    const res = await axios.post(`${BACKEND}/search`, { query: value });
+    setData(res.data);
   };
 
-  const searchMovies = async () => {
-    if (!query.trim()) return;
+  const handleInput = (value) => {
+    setQuery(value);
 
-    setLoading(true);
-    const res = await axios.post(`${BACKEND}/search`, { query });
-    setResults(res.data);
-    setLoading(false);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (value.trim()) searchMovies(value);
+    }, 600);
+  };
+
+  const toggleWatchlist = (movie) => {
+    if (watchlist.find(m => m.id === movie.id)) {
+      setWatchlist(watchlist.filter(m => m.id !== movie.id));
+    } else {
+      setWatchlist([...watchlist, movie]);
+    }
   };
 
   const handleHover = async (movie) => {
@@ -39,89 +47,101 @@ function App() {
     if (detailsCache[movie.id]) return;
 
     const res = await axios.get(`${BACKEND}/movie/${movie.id}`);
-
     setDetailsCache(prev => ({
       ...prev,
       [movie.id]: res.data
     }));
   };
 
-  const renderGrid = (movies) => (
-    <div className="grid">
-      {movies.map(movie => {
-        const details = detailsCache[movie.id];
+  const scroll = (id, dir) => {
+    document.getElementById(id).scrollBy({
+      left: dir === "left" ? -800 : 800,
+      behavior: "smooth"
+    });
+  };
 
-        return (
-          <div
-            key={movie.id}
-            className="card"
-            onMouseEnter={() => handleHover(movie)}
-            onMouseLeave={() => setExpanded(null)}
-          >
-            <img
-              src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
-              alt=""
-            />
+  const renderRow = (title, movies, id) =>
+    movies?.length > 0 && (
+      <div className="row-section">
+        <h2>{title}</h2>
+        <div className="row-wrapper">
+          <button className="arrow left" onClick={() => scroll(id,"left")}>‹</button>
+          <div className="row" id={id}>
+            {movies.slice(0, 60).map(movie => {
+              const details = detailsCache[movie.id];
 
-            {expanded === movie.id && details && (
-              <div className="hover-card">
-                {details.trailerKey && (
-                  <iframe
-                    src={`https://www.youtube.com/embed/${details.trailerKey}?autoplay=1&mute=1`}
-                    allow="autoplay"
-                    title="Trailer"
+              return (
+                <div
+                  key={movie.id}
+                  className="card"
+                  onMouseEnter={() => handleHover(movie)}
+                  onMouseLeave={() => setExpanded(null)}
+                >
+                  <img
+                    src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
+                    alt=""
                   />
-                )}
-                <div className="info">
-                  <h3>{details.title}</h3>
-                  <p>
-                    ⭐ {details.vote_average.toFixed(1)} |{" "}
-                    {details.original_language.toUpperCase()} |{" "}
-                    {details.release_date?.split("-")[0]}
-                  </p>
-                  <p>{details.overview.slice(0, 150)}...</p>
+
+                  <button
+                    className="watch-btn"
+                    onClick={() => toggleWatchlist(movie)}
+                  >
+                    {watchlist.find(m => m.id === movie.id) ? "✓" : "+"}
+                  </button>
+
+                  {expanded === movie.id && details && (
+                    <div className="hover-card">
+                      {details.trailerKey && (
+                        <iframe
+                          src={`https://www.youtube.com/embed/${details.trailerKey}?autoplay=1&mute=1`}
+                          allow="autoplay"
+                          title="Trailer"
+                        />
+                      )}
+                      <div className="info">
+                        <h3>{details.title}</h3>
+                        <p>{details.overview.slice(0, 120)}...</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })}
           </div>
-        );
-      })}
-    </div>
-  );
+          <button className="arrow right" onClick={() => scroll(id,"right")}>›</button>
+        </div>
+      </div>
+    );
 
   return (
     <div className="app">
 
-      <div className="search-section">
-        <h1>MoodFlix AI</h1>
-
-        <div className="search-box">
-          <input
-            placeholder="Describe your mood..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && searchMovies()}
+      {data.hero && (
+        <div className="hero">
+          <img
+            src={`https://image.tmdb.org/t/p/original${data.hero[0]?.backdrop_path}`}
+            alt=""
           />
-          <button onClick={searchMovies}>Search</button>
+          <div className="hero-overlay">
+            <h1>{data.hero[0]?.title}</h1>
+            <p>{data.hero[0]?.overview}</p>
+          </div>
         </div>
+      )}
+
+      <div className="search-section">
+        <input
+          placeholder="Search genre or mood..."
+          value={query}
+          onChange={(e) => handleInput(e.target.value)}
+        />
       </div>
 
-      {loading && <h2 style={{textAlign:"center"}}>Loading...</h2>}
-
-      {!loading && results.length === 0 ? (
-        <>
-          <h2>Trending Movies</h2>
-          {renderGrid(trending)}
-
-          <h2>Top Rated Movies</h2>
-          {renderGrid(topRated)}
-        </>
-      ) : (
-        <>
-          <h2>Search Results</h2>
-          {renderGrid(results)}
-        </>
-      )}
+      {renderRow("English", data.english, "en")}
+      {renderRow("Hindi", data.hindi, "hi")}
+      {renderRow("Tamil", data.tamil, "ta")}
+      {renderRow("Telugu", data.telugu, "te")}
+      {renderRow("Marathi", data.marathi, "mr")}
 
     </div>
   );
