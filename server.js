@@ -10,51 +10,79 @@ app.use(express.json());
 const TMDB = "https://api.themoviedb.org/3";
 const API_KEY = process.env.TMDB_KEY;
 
-/* HEALTH */
+if (!API_KEY) {
+  console.error("❌ TMDB_KEY missing in .env");
+  process.exit(1);
+}
+
+/* =====================================
+   HEALTH CHECK
+===================================== */
 app.get("/", (req, res) => {
-  res.json({ status: "MoodFlix running" });
+  res.json({ status: "MoodFlix Backend Running 🚀" });
 });
 
-/* GENRES */
+/* =====================================
+   LOAD GENRES SAFELY
+===================================== */
+
 let genreMap = {};
+let genresLoaded = false;
 
 async function loadGenres() {
-  const res = await axios.get(`${TMDB}/genre/movie/list`, {
-    params: { api_key: API_KEY }
-  });
+  try {
+    const res = await axios.get(`${TMDB}/genre/movie/list`, {
+      params: { api_key: API_KEY }
+    });
 
-  res.data.genres.forEach(g => {
-    genreMap[g.name.toLowerCase()] = g.id;
-  });
+    res.data.genres.forEach(g => {
+      genreMap[g.name.toLowerCase()] = g.id;
+    });
+
+    genresLoaded = true;
+    console.log("✅ Genres loaded");
+  } catch (err) {
+    console.error("❌ Failed to load genres", err.message);
+  }
 }
+
 loadGenres();
 
-/* MOOD INTELLIGENCE */
+/* =====================================
+   MOOD MAP
+===================================== */
+
 const moodMap = {
   sad: ["drama"],
   happy: ["comedy", "family"],
   romantic: ["romance"],
-  lonely: ["drama"],
-  stressed: ["comedy"],
+  romance: ["romance"],
+  love: ["romance"],
   excited: ["action", "adventure"],
   nostalgic: ["family", "drama"],
   scared: ["horror", "thriller"],
+  thriller: ["thriller"],
+  horror: ["horror"],
+  action: ["action"],
   motivated: ["drama"],
-  bored: ["thriller", "mystery"]
+  bored: ["mystery"]
 };
 
-/* FETCH BY LANGUAGE */
-async function fetchByLanguage(genreIds, language) {
+/* =====================================
+   BULK FETCH
+===================================== */
+
+async function fetchDiscover(genres, language) {
   let results = [];
 
-  for (let i = 1; i <= 8; i++) {
+  for (let i = 1; i <= 5; i++) {
     const res = await axios.get(`${TMDB}/discover/movie`, {
       params: {
         api_key: API_KEY,
-        with_genres: genreIds.join(","),
+        with_genres: genres.join(","),
         with_original_language: language,
         sort_by: "vote_average.desc",
-        "vote_count.gte": 100,
+        "vote_count.gte": 150,
         page: i
       }
     });
@@ -65,52 +93,91 @@ async function fetchByLanguage(genreIds, language) {
   return results.filter(m => m.poster_path);
 }
 
-/* SEARCH */
+/* =====================================
+   FALLBACK SEARCH
+===================================== */
+
+async function fallbackSearch(query) {
+  const res = await axios.get(`${TMDB}/search/movie`, {
+    params: {
+      api_key: API_KEY,
+      query,
+      include_adult: false
+    }
+  });
+
+  return res.data.results.filter(m => m.poster_path);
+}
+
+/* =====================================
+   SEARCH ENDPOINT
+===================================== */
+
 app.post("/search", async (req, res) => {
-  const { query = "" } = req.body;
-  const lower = query.toLowerCase();
-
-  let genres = [];
-
-  if (moodMap[lower]) {
-    moodMap[lower].forEach(g => {
-      if (genreMap[g]) genres.push(genreMap[g]);
-    });
-  }
-
-  if (genres.length === 0) {
-    return res.json({
-      hero: [],
-      english: [],
-      hindi: [],
-      tamil: [],
-      telugu: [],
-      marathi: []
-    });
-  }
-
   try {
-    const english = await fetchByLanguage(genres, "en");
-    const hindi = await fetchByLanguage(genres, "hi");
-    const tamil = await fetchByLanguage(genres, "ta");
-    const telugu = await fetchByLanguage(genres, "te");
-    const marathi = await fetchByLanguage(genres, "mr");
+    const { query = "" } = req.body;
+    const lower = query.toLowerCase().trim();
 
-    res.json({
-      hero: english.slice(0, 5),
-      english,
-      hindi,
-      tamil,
-      telugu,
-      marathi
+    if (!lower) {
+      return res.json({
+        english: [],
+        hindi: [],
+        tamil: [],
+        telugu: [],
+        marathi: []
+      });
+    }
+
+    if (!genresLoaded) {
+      await loadGenres();
+    }
+
+    let genres = [];
+
+    // 1️⃣ Mood mapping
+    if (moodMap[lower]) {
+      moodMap[lower].forEach(g => {
+        if (genreMap[g]) genres.push(genreMap[g]);
+      });
+    }
+
+    // 2️⃣ Direct genre match
+    if (genreMap[lower]) {
+      genres.push(genreMap[lower]);
+    }
+
+    // 3️⃣ If genre found → Discover API
+    if (genres.length > 0) {
+      const english = await fetchDiscover(genres, "en");
+      const hindi = await fetchDiscover(genres, "hi");
+      const tamil = await fetchDiscover(genres, "ta");
+      const telugu = await fetchDiscover(genres, "te");
+      const marathi = await fetchDiscover(genres, "mr");
+
+      return res.json({ english, hindi, tamil, telugu, marathi });
+    }
+
+    // 4️⃣ Fallback to TMDB search
+    const searched = await fallbackSearch(lower);
+
+    return res.json({
+      english: searched.filter(m => m.original_language === "en"),
+      hindi: searched.filter(m => m.original_language === "hi"),
+      tamil: searched.filter(m => m.original_language === "ta"),
+      telugu: searched.filter(m => m.original_language === "te"),
+      marathi: searched.filter(m => m.original_language === "mr")
     });
 
   } catch (err) {
-    res.status(500).json({ error: "Mood search failed" });
+    console.error("Search error:", err.message);
+    res.status(500).json({ error: "Search failed" });
   }
 });
 
-/* DETAILS */
+/* =====================================
+   MOVIE DETAILS
+===================================== */
+
 app.get("/movie/:id", async (req, res) => {
   try {
     const response = await axios.get(
@@ -132,9 +199,17 @@ app.get("/movie/:id", async (req, res) => {
       trailerKey: trailer ? trailer.key : null
     });
 
-  } catch {
+  } catch (err) {
+    console.error("Details error:", err.message);
     res.status(500).json({ error: "Details failed" });
   }
 });
 
-app.listen(process.env.PORT || 5000);
+/* =====================================
+   START SERVER
+===================================== */
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
