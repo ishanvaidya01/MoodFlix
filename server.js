@@ -1,122 +1,165 @@
-const path = require("path");
-const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database("./favorites.db");
-
-db.serialize(() => {
-  db.run(
-    "CREATE TABLE IF NOT EXISTS favorites (id INTEGER PRIMARY KEY, title TEXT, poster TEXT, rating REAL, language TEXT)"
-  );
-});
-
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
+const sqlite3 = require("sqlite3").verbose();
 require("dotenv").config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health
-app.get("/", (req, res) => {
-  res.send("MoodFlix Backend Running");
+const db = new sqlite3.Database("./favorites.db");
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS favorites (
+      id INTEGER PRIMARY KEY,
+      title TEXT,
+      poster TEXT,
+      rating REAL,
+      language TEXT,
+      type TEXT
+    )
+  `);
 });
 
-// Recommend Movies
+const TMDB = "https://api.themoviedb.org/3";
+const API_KEY = process.env.TMDB_KEY;
+
+/* -------------------- MOOD → GENRE MAP -------------------- */
+
+const moodGenres = {
+  happy: [35, 10751, 12],           // Comedy, Family, Adventure
+  sad: [18, 10749],                 // Drama, Romance
+  romantic: [10749, 18],
+  horror: [27],
+  action: [28, 53],                 // Action + Thriller
+  thriller: [53, 9648],             // Thriller + Mystery
+  adventure: [12, 14]               // Adventure + Fantasy
+};
+
+/* -------------------- HEALTH -------------------- */
+
+app.get("/", (req, res) => {
+  res.send("MoodFlix 2.0 Backend Running");
+});
+
+/* -------------------- RECOMMEND -------------------- */
+
 app.post("/recommend", async (req, res) => {
-  const { mood, page = 1 } = req.body;
+  const {
+    mood,
+    language = "",
+    type = "movie"
+  } = req.body;
 
   if (!mood) {
-    return res.status(400).json({ error: "Mood is required" });
+    return res.status(400).json({ error: "Mood required" });
   }
 
-  const genreMap = {
-    happy: 35,
-    sad: 18,
-    romantic: 10749,
-    horror: 27,
-    action: 28,
-    thriller: 53,
-    adventure: 12
-  };
+  const genres = moodGenres[mood.toLowerCase()] || [18];
 
-  const genreId = genreMap[mood.toLowerCase()] || 18;
+  const randomPage = Math.floor(Math.random() * 20) + 1;
+  const sortOptions = [
+    "popularity.desc",
+    "vote_average.desc",
+    "vote_count.desc",
+    "release_date.desc"
+  ];
+
+  const randomSort =
+    sortOptions[Math.floor(Math.random() * sortOptions.length)];
 
   try {
-    const movieResponse = await axios.get(
-      "https://api.themoviedb.org/3/discover/movie",
+    const response = await axios.get(
+      `${TMDB}/discover/${type}`,
       {
         params: {
-          api_key: process.env.TMDB_KEY,
-          with_genres: genreId,
-          sort_by: "popularity.desc",
-          page
+          api_key: API_KEY,
+          with_genres: genres.join(","),
+          with_original_language: language || undefined,
+          sort_by: randomSort,
+          page: randomPage,
+          vote_count.gte: 100
         }
       }
     );
 
     res.json({
-      movies: movieResponse.data.results,
-      total_pages: movieResponse.data.total_pages
+      results: response.data.results
     });
 
   } catch (err) {
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ error: "Recommendation failed" });
   }
 });
 
-// Movie Details
-app.get("/movie/:id", async (req, res) => {
+/* -------------------- DETAILS + OTT -------------------- */
+
+app.get("/details/:type/:id", async (req, res) => {
+  const { type, id } = req.params;
+
   try {
-    const response = await axios.get(
-      `https://api.themoviedb.org/3/movie/${req.params.id}`,
+    const details = await axios.get(
+      `${TMDB}/${type}/${id}`,
       {
         params: {
-          api_key: process.env.TMDB_KEY,
+          api_key: API_KEY,
           append_to_response: "videos"
         }
       }
     );
-    res.json(response.data);
+
+    const providers = await axios.get(
+      `${TMDB}/${type}/${id}/watch/providers`,
+      {
+        params: { api_key: API_KEY }
+      }
+    );
+
+    const indiaProviders =
+      providers.data.results?.IN?.flatrate || [];
+
+    res.json({
+      ...details.data,
+      watchProviders: indiaProviders
+    });
+
   } catch {
-    res.status(500).json({ error: "Failed to fetch movie details" });
+    res.status(500).json({ error: "Details fetch failed" });
   }
 });
 
-// Add Favorite
+/* -------------------- FAVORITES -------------------- */
+
 app.post("/favorite", (req, res) => {
-  const { id, title, poster, rating, language } = req.body;
+  const { id, title, poster, rating, language, type } = req.body;
 
   db.run(
-    "INSERT OR IGNORE INTO favorites (id, title, poster, rating, language) VALUES (?, ?, ?, ?, ?)",
-    [id, title, poster, rating, language]
+    `INSERT OR IGNORE INTO favorites 
+     (id, title, poster, rating, language, type)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, title, poster, rating, language, type]
   );
 
   res.json({ success: true });
 });
 
-// Remove Favorite
-app.delete("/favorite/:id", (req, res) => {
-  db.run("DELETE FROM favorites WHERE id = ?", [req.params.id]);
-  res.json({ success: true });
-});
-
-// Get Favorites
 app.get("/favorites", (req, res) => {
   db.all("SELECT * FROM favorites", [], (err, rows) => {
     res.json(rows);
   });
 });
 
-// Serve React build
-
-app.use(express.static(path.join(__dirname, "build")));
-
-app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "build", "index.html"));
+app.delete("/favorite/:id", (req, res) => {
+  db.run("DELETE FROM favorites WHERE id = ?", [req.params.id]);
+  res.json({ success: true });
 });
 
+/* -------------------- SERVER -------------------- */
+
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`MoodFlix backend running on ${PORT}`);
 });
