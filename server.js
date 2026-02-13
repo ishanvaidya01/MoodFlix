@@ -10,110 +10,123 @@ app.use(express.json());
 const TMDB = "https://api.themoviedb.org/3";
 const API_KEY = process.env.TMDB_KEY;
 
+/* ---------------- KEYWORD DETECTION ---------------- */
+
 const moodGenres = {
-  happy: [35, 10751, 12],
-  sad: [18, 10749],
-  romantic: [10749, 18],
+  happy: [35, 10751],
+  sad: [18],
+  romantic: [10749],
   horror: [27],
-  action: [28, 53],
-  thriller: [53, 9648],
-  adventure: [12, 14]
+  action: [28],
+  thriller: [53],
+  adventure: [12],
+  comedy: [35],
+  crime: [80],
+  mystery: [9648],
+  fantasy: [14],
+  sci: [878]
 };
 
+const languageKeywords = {
+  hindi: "hi",
+  tamil: "ta",
+  telugu: "te",
+  kannada: "kn",
+  english: "en"
+};
+
+function detectGenres(query) {
+  const lower = query.toLowerCase();
+  let genres = [];
+
+  Object.keys(moodGenres).forEach(key => {
+    if (lower.includes(key)) {
+      genres = genres.concat(moodGenres[key]);
+    }
+  });
+
+  return [...new Set(genres)];
+}
+
+function detectLanguage(query) {
+  const lower = query.toLowerCase();
+  for (let key in languageKeywords) {
+    if (lower.includes(key)) {
+      return languageKeywords[key];
+    }
+  }
+  return "";
+}
+
+/* ---------------- ROUTES ---------------- */
+
 app.get("/", (req, res) => {
-  res.send("MoodFlix AI Engine Running");
+  res.send("MoodFlix AI 3.0 Running");
 });
 
+/* SMART RECOMMENDATION */
+
 app.post("/recommend", async (req, res) => {
-  const { query = "", language = "", type = "movie" } = req.body;
+  const { query = "", language = "" } = req.body;
 
   try {
-    // 1️⃣ Try smart search first
+    let detectedLanguage = language || detectLanguage(query);
+    let genres = detectGenres(query);
+
+    // 1️⃣ If free-text search
     if (query.trim()) {
-      const searchRes = await axios.get(`${TMDB}/search/multi`, {
+      const searchRes = await axios.get(`${TMDB}/search/movie`, {
         params: {
           api_key: API_KEY,
           query,
-          include_adult: false,
-          page: 1
+          include_adult: false
         }
       });
 
-      let results = searchRes.data.results.filter(
-        item =>
-          item.media_type === type &&
-          (language ? item.original_language === language : true)
+      let results = searchRes.data.results.filter(movie =>
+        detectedLanguage ? movie.original_language === detectedLanguage : true
       );
 
-      if (results.length > 0) {
+      if (results.length > 5) {
         return res.json({ results });
-      }
-
-      // 2️⃣ Fallback to mood-based genre
-      const moodKey = query.toLowerCase();
-      if (moodGenres[moodKey]) {
-        const discoverRes = await axios.get(
-          `${TMDB}/discover/${type}`,
-          {
-            params: {
-              api_key: API_KEY,
-              with_genres: moodGenres[moodKey].join(","),
-              with_original_language: language || undefined,
-              sort_by: "popularity.desc",
-              vote_count_gte: 200,
-              page: Math.floor(Math.random() * 10) + 1
-            }
-          }
-        );
-        return res.json({ results: discoverRes.data.results });
       }
     }
 
-    // 3️⃣ Default fallback = trending
-    const trendingRes = await axios.get(
-      `${TMDB}/trending/${type}/week`,
-      {
-        params: { api_key: API_KEY }
+    // 2️⃣ Genre-based discovery
+    const discoverRes = await axios.get(`${TMDB}/discover/movie`, {
+      params: {
+        api_key: API_KEY,
+        with_genres: genres.length ? genres.join(",") : undefined,
+        with_original_language: detectedLanguage || undefined,
+        sort_by: "popularity.desc",
+        vote_count_gte: 200,
+        page: Math.floor(Math.random() * 10) + 1
       }
-    );
+    });
 
-    res.json({ results: trendingRes.data.results });
+    res.json({ results: discoverRes.data.results });
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Recommendation failed" });
   }
 });
 
-app.get("/details/:type/:id", async (req, res) => {
-  const { type, id } = req.params;
+/* TRENDING */
 
-  try {
-    const details = await axios.get(`${TMDB}/${type}/${id}`, {
-      params: {
-        api_key: API_KEY,
-        append_to_response: "videos"
-      }
-    });
-
-    const providers = await axios.get(
-      `${TMDB}/${type}/${id}/watch/providers`,
-      { params: { api_key: API_KEY } }
-    );
-
-    const indiaProviders =
-      providers.data.results?.IN?.flatrate || [];
-
-    res.json({
-      ...details.data,
-      watchProviders: indiaProviders
-    });
-
-  } catch {
-    res.status(500).json({ error: "Details failed" });
-  }
+app.get("/trending", async (req, res) => {
+  const response = await axios.get(`${TMDB}/trending/movie/week`, {
+    params: { api_key: API_KEY }
+  });
+  res.json({ results: response.data.results });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`MoodFlix AI running on ${PORT}`)
-);
+/* TOP RATED */
+
+app.get("/top-rated", async (req, res) => {
+  const response = await axios.get(`${TMDB}/movie/top_rated`, {
+    params: { api_key: API_KEY }
+  });
+  res.json({ results: response.data.results });
+});
+
+app.listen(process.env.PORT || 5000);

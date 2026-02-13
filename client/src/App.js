@@ -7,10 +7,9 @@ const BACKEND = "https://moodflix-backend-kztp.onrender.com";
 function App() {
   const [query, setQuery] = useState("");
   const [language, setLanguage] = useState("");
-  const [type, setType] = useState("movie");
-  const [results, setResults] = useState([]);
-  const [featured, setFeatured] = useState(null);
-  const [selected, setSelected] = useState(null);
+  const [searchResults, setSearchResults] = useState([]);
+  const [trending, setTrending] = useState([]);
+  const [topRated, setTopRated] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const languages = [
@@ -22,131 +21,79 @@ function App() {
     { label: "Kannada", value: "kn" }
   ];
 
-  const search = async () => {
+  const searchMovies = async () => {
     setLoading(true);
-
     const res = await axios.post(`${BACKEND}/recommend`, {
       query,
-      language,
-      type
+      language
     });
-
-    setResults(res.data.results);
-    setFeatured(res.data.results[0]);
+    setSearchResults(res.data.results);
     setLoading(false);
   };
 
-  const openDetails = async (id) => {
-    const res = await axios.get(`${BACKEND}/details/${type}/${id}`);
-    setSelected(res.data);
+  const loadTrending = async () => {
+    const res = await axios.get(`${BACKEND}/trending`);
+    setTrending(res.data.results);
+  };
+
+  const loadTopRated = async () => {
+    const res = await axios.get(`${BACKEND}/top-rated`);
+    setTopRated(res.data.results);
   };
 
   useEffect(() => {
-    search();
-  }, [language, type]);
+    loadTrending();
+    loadTopRated();
+  }, []);
 
-  return (
-    <div className="app">
-
-      <div className="navbar">
-        <div className="logo">MoodFlix AI</div>
-
-        <div className="search-container">
-          <input
-            placeholder="Describe what you feel..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && search()}
-          />
-          <button onClick={search}>Search</button>
-        </div>
-
-        <select onChange={(e) => setLanguage(e.target.value)}>
-          {languages.map(l => (
-            <option key={l.value} value={l.value}>
-              {l.label}
-            </option>
-          ))}
-        </select>
-
-        <div className="toggle">
-          <button
-            className={type === "movie" ? "active" : ""}
-            onClick={() => setType("movie")}
-          >
-            Movies
-          </button>
-          <button
-            className={type === "tv" ? "active" : ""}
-            onClick={() => setType("tv")}
-          >
-            Web Series
-          </button>
-        </div>
-      </div>
-
-      {featured && (
-        <div
-          className="hero"
-          style={{
-            backgroundImage: `url(https://image.tmdb.org/t/p/original${featured.backdrop_path})`
-          }}
-        >
-          <div className="hero-content">
-            <h1>{featured.title || featured.name}</h1>
-            <p>⭐ {featured.vote_average.toFixed(1)} / 10</p>
-            <button onClick={() => openDetails(featured.id)}>
-              Explore
-            </button>
-          </div>
-        </div>
-      )}
-
-      {loading && <div className="loader"></div>}
-
-      <div className="grid">
-        {results.map(item => (
-          <div
-            key={item.id}
-            className="card"
-            onClick={() => openDetails(item.id)}
-          >
+  const renderRow = (title, movies) => (
+    <>
+      <h2 className="section-title">{title}</h2>
+      <div className="row">
+        {movies.map(movie => (
+          <div key={movie.id} className="card">
             <img
-              src={`https://image.tmdb.org/t/p/w500${item.poster_path}`}
+              src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
               alt=""
             />
             <div className="rating">
-              {item.vote_average.toFixed(1)} / 10
+              ⭐ {movie.vote_average.toFixed(1)} / 10
             </div>
           </div>
         ))}
       </div>
+    </>
+  );
 
-      {selected && (
-        <div className="modal">
-          <div className="modal-content">
-            <span onClick={() => setSelected(null)}>×</span>
-            <h2>{selected.title || selected.name}</h2>
-            <p>{selected.overview}</p>
+  return (
+    <div className="app">
 
-            <div className="providers">
-              {selected.watchProviders?.map(p => (
-                <a
-                  key={p.provider_id}
-                  href={`https://www.google.com/search?q=watch+${selected.title}+on+${p.provider_name}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <img
-                    src={`https://image.tmdb.org/t/p/w200${p.logo_path}`}
-                    alt=""
-                  />
-                </a>
-              ))}
-            </div>
-          </div>
+      <div className="search-hero">
+        <h1>MoodFlix AI</h1>
+        <p>Describe your mood. I’ll find your movie.</p>
+
+        <div className="search-box">
+          <input
+            placeholder="e.g. sad tamil love story"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && searchMovies()}
+          />
+          <button onClick={searchMovies}>Search</button>
+
+          <select onChange={(e) => setLanguage(e.target.value)}>
+            {languages.map(l => (
+              <option key={l.value} value={l.value}>{l.label}</option>
+            ))}
+          </select>
         </div>
-      )}
+      </div>
+
+      {loading && <div className="loader"></div>}
+
+      {query && renderRow("Search Results", searchResults)}
+      {renderRow("Most Trending Movies", trending)}
+      {renderRow("High Rated Movies", topRated)}
 
     </div>
   );
