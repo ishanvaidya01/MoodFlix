@@ -80,7 +80,7 @@ app.post("/recommend", async (req, res) => {
           with_original_language: language || undefined,
           sort_by: randomSort,
           page: randomPage,
-          vote_count.gte: 100
+          "vote_count.gte": 100
         }
       }
     );
