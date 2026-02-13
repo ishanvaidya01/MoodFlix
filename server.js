@@ -10,123 +10,66 @@ app.use(express.json());
 const TMDB = "https://api.themoviedb.org/3";
 const API_KEY = process.env.TMDB_KEY;
 
-/* ---------------- KEYWORD DETECTION ---------------- */
-
-const moodGenres = {
-  happy: [35, 10751],
-  sad: [18],
-  romantic: [10749],
-  horror: [27],
-  action: [28],
-  thriller: [53],
-  adventure: [12],
-  comedy: [35],
-  crime: [80],
-  mystery: [9648],
-  fantasy: [14],
-  sci: [878]
-};
-
-const languageKeywords = {
-  hindi: "hi",
-  tamil: "ta",
-  telugu: "te",
-  kannada: "kn",
-  english: "en"
-};
-
-function detectGenres(query) {
-  const lower = query.toLowerCase();
-  let genres = [];
-
-  Object.keys(moodGenres).forEach(key => {
-    if (lower.includes(key)) {
-      genres = genres.concat(moodGenres[key]);
-    }
-  });
-
-  return [...new Set(genres)];
-}
-
-function detectLanguage(query) {
-  const lower = query.toLowerCase();
-  for (let key in languageKeywords) {
-    if (lower.includes(key)) {
-      return languageKeywords[key];
-    }
-  }
-  return "";
-}
-
-/* ---------------- ROUTES ---------------- */
-
-app.get("/", (req, res) => {
-  res.send("MoodFlix AI 3.0 Running");
-});
-
-/* SMART RECOMMENDATION */
+/* SEARCH */
 
 app.post("/recommend", async (req, res) => {
-  const { query = "", language = "" } = req.body;
+  const { query = "", page = 1 } = req.body;
 
   try {
-    let detectedLanguage = language || detectLanguage(query);
-    let genres = detectGenres(query);
-
-    // 1️⃣ If free-text search
-    if (query.trim()) {
-      const searchRes = await axios.get(`${TMDB}/search/movie`, {
-        params: {
-          api_key: API_KEY,
-          query,
-          include_adult: false
-        }
-      });
-
-      let results = searchRes.data.results.filter(movie =>
-        detectedLanguage ? movie.original_language === detectedLanguage : true
-      );
-
-      if (results.length > 5) {
-        return res.json({ results });
-      }
+    if (!query.trim()) {
+      return res.json({ results: [], total_pages: 1 });
     }
 
-    // 2️⃣ Genre-based discovery
-    const discoverRes = await axios.get(`${TMDB}/discover/movie`, {
+    const response = await axios.get(`${TMDB}/search/movie`, {
       params: {
         api_key: API_KEY,
-        with_genres: genres.length ? genres.join(",") : undefined,
-        with_original_language: detectedLanguage || undefined,
-        sort_by: "popularity.desc",
-        vote_count_gte: 200,
-        page: Math.floor(Math.random() * 10) + 1
+        query,
+        include_adult: false,
+        page
       }
     });
 
-    res.json({ results: discoverRes.data.results });
+    const results = response.data.results
+      .filter(m => m.poster_path && m.vote_count > 50)
+      .sort((a, b) => b.vote_average - a.vote_average)
+      .slice(0, 36);
 
-  } catch {
-    res.status(500).json({ error: "Recommendation failed" });
+    res.json({
+      results,
+      total_pages: response.data.total_pages
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: "Search failed" });
   }
 });
 
-/* TRENDING */
+/* FULL MOVIE DETAILS */
 
-app.get("/trending", async (req, res) => {
-  const response = await axios.get(`${TMDB}/trending/movie/week`, {
-    params: { api_key: API_KEY }
-  });
-  res.json({ results: response.data.results });
-});
+app.get("/movie/:id", async (req, res) => {
+  try {
+    const response = await axios.get(
+      `${TMDB}/movie/${req.params.id}`,
+      {
+        params: {
+          api_key: API_KEY,
+          append_to_response: "videos"
+        }
+      }
+    );
 
-/* TOP RATED */
+    const trailer = response.data.videos.results.find(
+      v => v.type === "Trailer" && v.site === "YouTube"
+    );
 
-app.get("/top-rated", async (req, res) => {
-  const response = await axios.get(`${TMDB}/movie/top_rated`, {
-    params: { api_key: API_KEY }
-  });
-  res.json({ results: response.data.results });
+    res.json({
+      ...response.data,
+      trailerKey: trailer ? trailer.key : null
+    });
+
+  } catch {
+    res.status(500).json({ error: "Details fetch failed" });
+  }
 });
 
 app.listen(process.env.PORT || 5000);
