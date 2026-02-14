@@ -15,50 +15,66 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-/* =====================================
-   HEALTH CHECK
-===================================== */
-app.get("/", (req, res) => {
-  res.json({ status: "MoodFlix Backend Running 🚀" });
-});
+/* =====================================================
+   BASIC MEMORY CACHE (FAST + FREE PERFORMANCE BOOST)
+===================================================== */
 
-/* =====================================
+const cache = {};
+const CACHE_TIME = 1000 * 60 * 30; // 30 minutes
+
+function getCache(key) {
+  if (!cache[key]) return null;
+  if (Date.now() - cache[key].time > CACHE_TIME) {
+    delete cache[key];
+    return null;
+  }
+  return cache[key].data;
+}
+
+function setCache(key, data) {
+  cache[key] = { data, time: Date.now() };
+}
+
+/* =====================================================
    LOAD GENRES
-===================================== */
+===================================================== */
 
 let genreMap = {};
 let genresLoaded = false;
 
 async function loadGenres() {
-  try {
-    const res = await axios.get(`${TMDB}/genre/movie/list`, {
-      params: { api_key: API_KEY }
-    });
-
-    res.data.genres.forEach(g => {
-      genreMap[g.name.toLowerCase()] = g.id;
-    });
-
+  const cached = getCache("genres");
+  if (cached) {
+    genreMap = cached;
     genresLoaded = true;
-    console.log("✅ Genres loaded");
-  } catch (err) {
-    console.error("❌ Failed to load genres", err.message);
+    return;
   }
+
+  const res = await axios.get(`${TMDB}/genre/movie/list`, {
+    params: { api_key: API_KEY }
+  });
+
+  res.data.genres.forEach(g => {
+    genreMap[g.name.toLowerCase()] = g.id;
+  });
+
+  setCache("genres", genreMap);
+  genresLoaded = true;
 }
 
 loadGenres();
 
-/* =====================================
+/* =====================================================
    MASSIVE MOOD MAP
-===================================== */
+===================================================== */
 
 const moodMap = {
   sad: ["drama"],
-  heartbroken: ["romance", "drama"],
-  lonely: ["romance", "drama"],
   depressed: ["drama"],
+  heartbroken: ["romance", "drama"],
+  lonely: ["romance"],
   happy: ["comedy", "family"],
-  overjoyed: ["comedy", "music"],
+  overjoyed: ["comedy"],
   joyful: ["comedy"],
   excited: ["action", "adventure"],
   angry: ["action", "thriller"],
@@ -76,10 +92,6 @@ const moodMap = {
   curious: ["mystery", "science fiction"]
 };
 
-/* =====================================
-   DETECT MOOD FROM SENTENCE
-===================================== */
-
 function detectMood(input) {
   for (let mood in moodMap) {
     if (input.includes(mood)) {
@@ -89,17 +101,22 @@ function detectMood(input) {
   return null;
 }
 
-/* =====================================
-   MASSIVE DISCOVER FETCH
-===================================== */
+/* =====================================================
+   MASSIVE LANGUAGE FETCH
+===================================================== */
 
-async function fetchMassiveDiscover(genres) {
-  const pages = Array.from({ length: 15 }, (_, i) => i + 1);
+async function fetchMassiveByLanguage(lang, genres) {
+  const cacheKey = `${lang}-${genres.join(",")}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
+  const pages = Array.from({ length: 20 }, (_, i) => i + 1);
 
   const requests = pages.map(page =>
     axios.get(`${TMDB}/discover/movie`, {
       params: {
         api_key: API_KEY,
+        with_original_language: lang,
         with_genres: genres.length ? genres.join(",") : undefined,
         sort_by: "popularity.desc",
         page
@@ -110,51 +127,62 @@ async function fetchMassiveDiscover(genres) {
   const responses = await Promise.all(requests);
 
   let results = [];
-  responses.forEach(res => {
-    results.push(...res.data.results);
+  responses.forEach(r => {
+    results.push(...r.data.results);
   });
 
-  return results.filter(m => m.poster_path);
+  results = results.filter(m => m.poster_path);
+
+  setCache(cacheKey, results);
+  return results;
 }
 
-/* =====================================
-   TRENDING
-===================================== */
+/* =====================================================
+   TRENDING (BLEND BOOST)
+===================================================== */
 
-async function fetchTrending() {
+async function fetchTrending(lang) {
+  const cacheKey = `trending-${lang}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
   const pages = [1, 2, 3];
 
   const requests = pages.map(page =>
     axios.get(`${TMDB}/trending/movie/week`, {
-      params: { api_key: API_KEY, page }
+      params: {
+        api_key: API_KEY,
+        page
+      }
     })
   );
 
   const responses = await Promise.all(requests);
 
   let results = [];
-  responses.forEach(res => {
-    results.push(...res.data.results);
+  responses.forEach(r => {
+    results.push(...r.data.results);
   });
 
-  return results.filter(m => m.poster_path);
+  results = results
+    .filter(m => m.poster_path && m.original_language === lang);
+
+  setCache(cacheKey, results);
+  return results;
 }
 
-/* =====================================
-   SEARCH ENDPOINT
-===================================== */
+/* =====================================================
+   SEARCH ENDPOINT (MAX POWER)
+===================================================== */
 
 app.post("/search", async (req, res) => {
   try {
     const { query = "" } = req.body;
     const lower = query.toLowerCase().trim();
 
-    if (!genresLoaded) {
-      await loadGenres();
-    }
+    if (!genresLoaded) await loadGenres();
 
     let genres = [];
-
     const detected = detectMood(lower);
 
     if (detected) {
@@ -163,34 +191,36 @@ app.post("/search", async (req, res) => {
       });
     }
 
-    let massiveResults = await fetchMassiveDiscover(genres);
+    const languages = ["en", "hi", "ta", "te", "mr"];
 
-    if (massiveResults.length < 200) {
-      const trending = await fetchTrending();
-      massiveResults = [...massiveResults, ...trending];
+    const results = await Promise.all(
+      languages.map(lang =>
+        fetchMassiveByLanguage(lang, genres)
+      )
+    );
+
+    let response = {};
+
+    for (let i = 0; i < languages.length; i++) {
+      const lang = languages[i];
+      let movies = results[i];
+
+      // If low volume, blend trending
+      if (movies.length < 150) {
+        const trending = await fetchTrending(lang);
+        movies = [...movies, ...trending];
+      }
+
+      response[
+        lang === "en" ? "english" :
+        lang === "hi" ? "hindi" :
+        lang === "ta" ? "tamil" :
+        lang === "te" ? "telugu" :
+        "marathi"
+      ] = movies.sort((a, b) => b.popularity - a.popularity);
     }
 
-    const english = massiveResults
-      .filter(m => m.original_language === "en")
-      .sort((a, b) => b.vote_average - a.vote_average);
-
-    const hindi = massiveResults
-      .filter(m => m.original_language === "hi")
-      .sort((a, b) => b.vote_average - a.vote_average);
-
-    const tamil = massiveResults
-      .filter(m => m.original_language === "ta")
-      .sort((a, b) => b.vote_average - a.vote_average);
-
-    const telugu = massiveResults
-      .filter(m => m.original_language === "te")
-      .sort((a, b) => b.vote_average - a.vote_average);
-
-    const marathi = massiveResults
-      .filter(m => m.original_language === "mr")
-      .sort((a, b) => b.vote_average - a.vote_average);
-
-    res.json({ english, hindi, tamil, telugu, marathi });
+    res.json(response);
 
   } catch (err) {
     console.error("Search error:", err.message);
@@ -198,9 +228,9 @@ app.post("/search", async (req, res) => {
   }
 });
 
-/* =====================================
-   MOVIE DETAILS (WITH PROVIDERS)
-===================================== */
+/* =====================================================
+   MOVIE DETAILS
+===================================================== */
 
 app.get("/movie/:id", async (req, res) => {
   try {
@@ -233,9 +263,9 @@ app.get("/movie/:id", async (req, res) => {
   }
 });
 
-/* =====================================
+/* =====================================================
    START SERVER
-===================================== */
+===================================================== */
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

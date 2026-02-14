@@ -1,159 +1,197 @@
 body {
-  margin:0;
-  background:#0c0c14;
-  font-family:'Inter',sans-serif;
-  color:white;
-  overflow-x:hidden;
+  margin: 0;
+  background: #0c0c14;
+  font-family: 'Inter', sans-serif;
+  color: white;
+  overflow-x: hidden;
 }
 
-/* Splash */
+/* ================= SPLASH ================= */
+
 .splash {
-  height:100vh;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  background:black;
-  animation:fadeOut 2.2s ease forwards;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: black;
+  animation: fadeOut 2.2s ease forwards;
 }
 
 .splash-logo {
-  font-size:4rem;
-  color:#e50914;
-  animation:pulse 1.8s infinite;
+  font-size: 4rem;
+  color: #e50914;
+  animation: pulse 1.8s infinite;
 }
 
 @keyframes pulse {
-  0%{transform:scale(1)}
-  50%{transform:scale(1.1)}
-  100%{transform:scale(1)}
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
 }
 
-/* Landing */
+/* ================= LANDING ================= */
+
 .landing {
-  text-align:center;
-  padding:80px 20px;
-  animation:fadeIn 0.8s ease;
+  text-align: center;
+  padding: 80px 20px;
+  animation: fadeIn 0.8s ease;
 }
 
 .logo {
-  font-size:3.5rem;
-  color:#e50914;
+  font-size: 3.5rem;
+  color: #e50914;
 }
 
 .tagline {
-  opacity:0.8;
-  margin-bottom:40px;
+  opacity: 0.8;
+  margin-bottom: 40px;
 }
 
-/* Search */
+/* ================= SEARCH ================= */
+
 .search-section {
-  text-align:center;
-  margin:40px 0;
+  text-align: center;
+  margin: 40px 0;
 }
 
 .search-section input {
-  width:420px;
-  padding:14px;
-  border-radius:30px;
-  border:none;
+  width: 420px;
+  padding: 14px;
+  border-radius: 30px;
+  border: none;
+  outline: none;
 }
 
 .search-section button {
-  margin-left:10px;
-  padding:14px 20px;
-  border-radius:30px;
-  border:none;
-  background:#e50914;
-  color:white;
+  margin-left: 10px;
+  padding: 14px 20px;
+  border-radius: 30px;
+  border: none;
+  background: #e50914;
+  color: white;
+  cursor: pointer;
+  transition: 0.3s;
 }
 
-/* Rows */
+.search-section button:hover {
+  background: #ff1f2a;
+}
+
+/* ================= ROW SECTION ================= */
+
 .row-section {
-  padding:0 40px;
-  margin-bottom:60px;
+  padding: 0 40px;
+  margin-bottom: 60px;
 }
 
-.row-wrapper {
-  position:relative;
+.row-section h2 {
+  margin-bottom: 20px;
 }
+
+/* ================= HORIZONTAL SCROLL ================= */
 
 .row {
-  display:flex;
-  gap:20px;
-  overflow:hidden;
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  padding: 10px 0 20px 0;
+  scrollbar-width: none;
+}
+
+.row::-webkit-scrollbar {
+  display: none;
+}
+
+/* ================= MOVIE CARDS ================= */
+
+.card {
+  flex: 0 0 auto;
+  cursor: pointer;
 }
 
 .card img {
-  width:200px;
-  border-radius:12px;
-  transition:transform .3s cubic-bezier(.4,0,.2,1);
+  width: 150px;
+  border-radius: 12px;
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
+  will-change: transform;
 }
 
 .card:hover img {
-  transform:scale(1.08);
+  transform: scale(1.08);
 }
 
-/* Arrows */
+/* ================= ARROWS ================= */
+
 .arrow {
-  position:absolute;
-  top:40%;
-  width:45px;
-  height:45px;
-  border-radius:50%;
-  border:none;
-  background:rgba(0,0,0,0.6);
-  color:white;
-  font-size:1.8rem;
+  position: absolute;
+  top: 40%;
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  font-size: 1.8rem;
+  cursor: pointer;
+  z-index: 5;
 }
 
-.arrow.left{left:0}
-.arrow.right{right:0}
+.arrow.left { left: 0; }
+.arrow.right { right: 0; }
 
-/* Modal */
+.row-wrapper {
+  position: relative;
+}
+
+/* ================= MODAL ================= */
+
 .overlay {
-  position:fixed;
-  inset:0;
-  backdrop-filter:blur(8px);
-  background:rgba(0,0,0,0.6);
-  z-index:999;
-  animation:fadeIn .3s ease;
+  position: fixed;
+  inset: 0;
+  backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.75);
+  z-index: 999;
+  animation: fadeIn .3s ease;
 }
 
 .modal {
-  position:fixed;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%);
-  width:850px;
-  background:#111;
-  border-radius:20px;
-  padding:20px;
-  z-index:1000;
-  animation:scaleUp .3s cubic-bezier(.4,0,.2,1);
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90vw;
+  max-width: 1100px;
+  max-height: 90vh;
+  background: #111;
+  border-radius: 20px 20px 0 0;
+  padding: 25px;
+  z-index: 1000;
+  overflow-y: auto;
+  animation: slideUp .3s ease;
 }
 
 .modal iframe {
-  width:100%;
-  height:450px;
-  border-radius:15px;
+  width: 100%;
+  height: 450px;
+  border-radius: 15px;
 }
 
 .modal-info {
-  margin-top:20px;
+  margin-top: 20px;
 }
 
-/* Animations */
-@keyframes fadeIn {
-  from{opacity:0}
-  to{opacity:1}
+.modal-info h2 {
+  margin-bottom: 10px;
 }
 
-@keyframes scaleUp {
-  from{transform:translate(-50%,-50%) scale(.9);opacity:0}
-  to{transform:translate(-50%,-50%) scale(1);opacity:1}
+.modal-info p {
+  opacity: 0.85;
+  line-height: 1.6;
 }
 
-/* ===== ABOUT SECTION ===== */
+/* ================= ABOUT SECTION ================= */
 
 .about {
   margin-top: 120px;
@@ -162,7 +200,6 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 60px;
-  animation: fadeUp 1s ease;
 }
 
 .about-card {
@@ -182,19 +219,6 @@ body {
   box-shadow: 0 30px 80px rgba(0,0,0,0.6);
 }
 
-.about-card h2 {
-  margin-bottom: 25px;
-  font-size: 1.8rem;
-}
-
-.about-card p {
-  opacity: 0.85;
-  line-height: 1.8;
-  margin-bottom: 20px;
-}
-
-/* ===== CREATOR CARD ===== */
-
 .creator-card {
   display: flex;
   align-items: center;
@@ -209,57 +233,9 @@ body {
   border: 1px solid rgba(255,255,255,0.08);
   backdrop-filter: blur(15px);
   box-shadow: 0 25px 80px rgba(0,0,0,0.5);
-  transition: transform .4s ease, box-shadow .4s ease;
 }
 
-.creator-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 35px 100px rgba(0,0,0,0.7);
-}
-
-.creator-image img {
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 3px solid #e50914;
-  box-shadow: 0 0 30px rgba(229,9,20,0.6);
-}
-
-.creator-info h3 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.creator-info span {
-  display: block;
-  margin: 8px 0 15px;
-  color: #e50914;
-  font-weight: 500;
-}
-
-.creator-info p {
-  max-width: 400px;
-  opacity: 0.85;
-  line-height: 1.6;
-}
-
-/* ===== ANIMATION ===== */
-
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(40px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ===============================
-   LOADING OVERLAY
-================================ */
+/* ================= LOADING ================= */
 
 .loading-overlay {
   position: fixed;
@@ -271,17 +247,7 @@ body {
   justify-content: center;
   align-items: center;
   z-index: 2000;
-  animation: fadeIn 0.4s ease;
 }
-
-.loading-overlay p {
-  margin-top: 20px;
-  font-size: 1rem;
-  opacity: 0.85;
-  letter-spacing: 0.5px;
-}
-
-/* Loader Animation */
 
 .loader {
   display: flex;
@@ -296,13 +262,8 @@ body {
   animation: bounce 1.2s infinite ease-in-out;
 }
 
-.loader span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.loader span:nth-child(3) {
-  animation-delay: 0.4s;
-}
+.loader span:nth-child(2) { animation-delay: 0.2s; }
+.loader span:nth-child(3) { animation-delay: 0.4s; }
 
 @keyframes bounce {
   0%, 80%, 100% {
@@ -311,6 +272,24 @@ body {
   }
   40% {
     transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* ================= ANIMATIONS ================= */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateX(-50%) translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
     opacity: 1;
   }
 }
