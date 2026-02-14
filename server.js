@@ -23,7 +23,7 @@ app.get("/", (req, res) => {
 });
 
 /* =====================================
-   LOAD GENRES SAFELY
+   LOAD GENRES
 ===================================== */
 
 let genreMap = {};
@@ -49,52 +49,79 @@ async function loadGenres() {
 loadGenres();
 
 /* =====================================
-   MOOD MAP
+   EXPANDED MOOD MAP
 ===================================== */
 
 const moodMap = {
   sad: ["drama"],
+  heartbroken: ["romance", "drama"],
+  lonely: ["romance", "drama"],
   happy: ["comedy", "family"],
-  romantic: ["romance"],
-  romance: ["romance"],
-  love: ["romance"],
+  overjoyed: ["comedy", "music"],
   excited: ["action", "adventure"],
+  angry: ["action", "thriller"],
+  romantic: ["romance"],
+  love: ["romance"],
   nostalgic: ["family", "drama"],
+  overwhelmed: ["drama", "family"],
   scared: ["horror", "thriller"],
-  thriller: ["thriller"],
   horror: ["horror"],
+  thriller: ["thriller"],
   action: ["action"],
   motivated: ["drama"],
-  bored: ["mystery"]
+  bored: ["mystery"],
+  adventurous: ["adventure", "action"],
+  curious: ["mystery", "sci-fi"]
 };
 
 /* =====================================
-   BULK FETCH
+   DISCOVER (PARALLEL)
 ===================================== */
 
 async function fetchDiscover(genres, language) {
-  let results = [];
+  const pages = [1, 2, 3, 4, 5];
 
-  for (let i = 1; i <= 5; i++) {
-    const res = await axios.get(`${TMDB}/discover/movie`, {
+  const requests = pages.map(page =>
+    axios.get(`${TMDB}/discover/movie`, {
       params: {
         api_key: API_KEY,
         with_genres: genres.join(","),
         with_original_language: language,
         sort_by: "vote_average.desc",
-        "vote_count.gte": 150,
-        page: i
+        "vote_count.gte": 50,
+        page
       }
-    });
+    })
+  );
 
+  const responses = await Promise.all(requests);
+
+  let results = [];
+  responses.forEach(res => {
     results.push(...res.data.results);
-  }
+  });
 
-  return results.filter(m => m.poster_path);
+  return results
+    .filter(m => m.poster_path)
+    .sort((a, b) => b.vote_average - a.vote_average);
 }
 
 /* =====================================
-   FALLBACK SEARCH
+   TRENDING (SAFE FALLBACK)
+===================================== */
+
+async function fetchTrending(language) {
+  const res = await axios.get(`${TMDB}/trending/movie/week`, {
+    params: { api_key: API_KEY }
+  });
+
+  return res.data.results
+    .filter(m => m.poster_path && m.original_language === language)
+    .sort((a, b) => b.vote_average - a.vote_average);
+}
+
+/* =====================================
+   SEARCH FALLBACK
 ===================================== */
 
 async function fallbackSearch(query) {
@@ -106,7 +133,9 @@ async function fallbackSearch(query) {
     }
   });
 
-  return res.data.results.filter(m => m.poster_path);
+  return res.data.results
+    .filter(m => m.poster_path)
+    .sort((a, b) => b.vote_average - a.vote_average);
 }
 
 /* =====================================
@@ -118,35 +147,32 @@ app.post("/search", async (req, res) => {
     const { query = "" } = req.body;
     const lower = query.toLowerCase().trim();
 
-    if (!lower) {
-      return res.json({
-        english: [],
-        hindi: [],
-        tamil: [],
-        telugu: [],
-        marathi: []
-      });
-    }
-
     if (!genresLoaded) {
       await loadGenres();
     }
 
+    if (!lower) {
+      const english = await fetchTrending("en");
+      const hindi = await fetchTrending("hi");
+      const tamil = await fetchTrending("ta");
+      const telugu = await fetchTrending("te");
+      const marathi = await fetchTrending("mr");
+
+      return res.json({ english, hindi, tamil, telugu, marathi });
+    }
+
     let genres = [];
 
-    // 1️⃣ Mood mapping
     if (moodMap[lower]) {
       moodMap[lower].forEach(g => {
         if (genreMap[g]) genres.push(genreMap[g]);
       });
     }
 
-    // 2️⃣ Direct genre match
     if (genreMap[lower]) {
       genres.push(genreMap[lower]);
     }
 
-    // 3️⃣ If genre found → Discover API
     if (genres.length > 0) {
       const english = await fetchDiscover(genres, "en");
       const hindi = await fetchDiscover(genres, "hi");
@@ -157,16 +183,29 @@ app.post("/search", async (req, res) => {
       return res.json({ english, hindi, tamil, telugu, marathi });
     }
 
-    // 4️⃣ Fallback to TMDB search
     const searched = await fallbackSearch(lower);
 
-    return res.json({
-      english: searched.filter(m => m.original_language === "en"),
-      hindi: searched.filter(m => m.original_language === "hi"),
-      tamil: searched.filter(m => m.original_language === "ta"),
-      telugu: searched.filter(m => m.original_language === "te"),
-      marathi: searched.filter(m => m.original_language === "mr")
-    });
+    let english = searched.filter(m => m.original_language === "en");
+    let hindi = searched.filter(m => m.original_language === "hi");
+    let tamil = searched.filter(m => m.original_language === "ta");
+    let telugu = searched.filter(m => m.original_language === "te");
+    let marathi = searched.filter(m => m.original_language === "mr");
+
+    if (
+      !english.length &&
+      !hindi.length &&
+      !tamil.length &&
+      !telugu.length &&
+      !marathi.length
+    ) {
+      english = await fetchTrending("en");
+      hindi = await fetchTrending("hi");
+      tamil = await fetchTrending("ta");
+      telugu = await fetchTrending("te");
+      marathi = await fetchTrending("mr");
+    }
+
+    return res.json({ english, hindi, tamil, telugu, marathi });
 
   } catch (err) {
     console.error("Search error:", err.message);
@@ -175,7 +214,7 @@ app.post("/search", async (req, res) => {
 });
 
 /* =====================================
-   MOVIE DETAILS
+   MOVIE DETAILS (WITH PROVIDERS)
 ===================================== */
 
 app.get("/movie/:id", async (req, res) => {
@@ -185,7 +224,7 @@ app.get("/movie/:id", async (req, res) => {
       {
         params: {
           api_key: API_KEY,
-          append_to_response: "videos"
+          append_to_response: "videos,watch/providers"
         }
       }
     );
@@ -194,14 +233,36 @@ app.get("/movie/:id", async (req, res) => {
       v => v.type === "Trailer" && v.site === "YouTube"
     );
 
+    const providers =
+      response.data["watch/providers"]?.results?.IN?.flatrate || [];
+
     res.json({
       ...response.data,
-      trailerKey: trailer ? trailer.key : null
+      trailerKey: trailer ? trailer.key : null,
+      providers
     });
 
   } catch (err) {
     console.error("Details error:", err.message);
     res.status(500).json({ error: "Details failed" });
+  }
+});
+
+/* =====================================
+   TRENDING ROUTE
+===================================== */
+
+app.get("/trending", async (req, res) => {
+  try {
+    const english = await fetchTrending("en");
+    const hindi = await fetchTrending("hi");
+    const tamil = await fetchTrending("ta");
+    const telugu = await fetchTrending("te");
+    const marathi = await fetchTrending("mr");
+
+    res.json({ english, hindi, tamil, telugu, marathi });
+  } catch (err) {
+    res.status(500).json({ error: "Trending failed" });
   }
 });
 
