@@ -1,33 +1,21 @@
 {
   "name": "moodflix",
-  "version": "2.0.0",
-  "description": "Offline mood-aware movie recommender — local matrix-factorization ML, zero API keys",
-  "main": "server.js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "data:prepare": "node scripts/prepare-data.js",
-    "test": "node --test tests/"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [
-    "movielens",
-    "recommender-system",
-    "matrix-factorization",
-    "offline",
-    "local-ml"
-  ],
-  "author": "Ishan Vaidya",
-  "license": "MIT",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "type": "commonjs",
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "dependencies": {
-    "compression": "^1.8.2",
+    "axios": "^1.13.5",
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
-    "helmet": "^8.3.0",
+    "react-intersection-observer": "^10.0.2",
     "sqlite3": "^5.1.7"
   }
 }
