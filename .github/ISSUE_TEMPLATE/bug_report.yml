@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a reproducible problem with MoodFlix
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Remove API keys, `.env` contents, and other secrets from logs before submitting.
+        For security vulnerabilities, follow [SECURITY.md](https://github.com/ishanvaidya01/MoodFlix/blob/main/SECURITY.md) instead.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug and its impact.
+      placeholder: A clear and concise description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the API with `node server.js`
+        2. Start the client with `npm start`
+        3. Search for "..."
+        4. Click ...
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Search / mood matching
+        - Movie rails (English, Hindi, Tamil, Telugu, Marathi)
+        - Detail modal, trailer, or providers
+        - Client UI / styling
+        - Local setup or environment variables
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: "e.g. 20.11.1 (run `node --version`)"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Paste terminal output or attach screenshots. Do not include secrets.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues before opening this report.
+          required: true
+        - label: I removed API keys, tokens, and other secrets from this report.
+          required: true

@@ -1,0 +1,60 @@
+name: Feature request
+description: Suggest an improvement or a new capability for MoodFlix
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. MoodFlix is intentionally small, so explain the user problem before proposing implementation details.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What is difficult or missing today?
+      placeholder: When I ..., I cannot ... because ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you would like. Note any API, UI, or configuration changes.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Primary area
+      options:
+        - Mood matching and recommendations
+        - Additional languages or regions
+        - Movie details and streaming availability
+        - Client UI and accessibility
+        - Setup, documentation, or developer experience
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This proposal does not require committing secrets or personal data.
+          required: true
+        - label: I understand that TMDB API terms and attribution requirements apply to data-related features.
+          required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and discussions for this idea.
+          required: true
