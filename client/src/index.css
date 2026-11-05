@@ -1,13 +1,73 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-900 text-neutral-100 font-display antialiased;
+}
+
+/* subtle film-grain background */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 45, 85, 0.14), transparent 70%);
+}
+
+/* deterministic "poster" gradients — no external images needed */
+.poster-art {
+  position: relative;
+  overflow: hidden;
+}
+.poster-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 30%, rgba(7, 7, 12, 0.92) 100%);
+}
+
+.score-bar {
+  background: linear-gradient(to right, var(--color, #ff2d55) var(--percent, 0%), rgba(255, 255, 255, 0.12) var(--percent, 0%));
+}
+
+.chip {
+  @apply inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-neutral-300;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-accent-rose to-accent-ember px-6 py-3 font-semibold text-white shadow-lg shadow-accent-rose/25 transition hover:brightness-110 active:scale-[0.98] disabled:opacity-60;
+}
+
+.input-mood {
+  @apply w-full rounded-2xl border border-white/10 bg-ink-850/80 px-5 py-4 text-lg text-neutral-100 placeholder:text-neutral-500 outline-none transition focus:border-accent-rose/60 focus:ring-4 focus:ring-accent-rose/15;
+}
+
+/* horizontal scroll strip */
+.strip {
+  scrollbar-width: none;
+}
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

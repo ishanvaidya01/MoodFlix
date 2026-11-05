@@ -2,264 +2,217 @@
 
 # MoodFlix
 
-Mood-first movie discovery: describe how you feel and MoodFlix returns popular films in five languages that match the mood.
+Cinema shaped by emotion — an offline, mood-aware movie recommender powered by a **matrix-factorization ML model trained on real MovieLens ratings**. No API keys, no cloud, everything runs on your machine.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Express](https://img.shields.io/badge/Express-5.x-000000?logo=express&logoColor=white)](https://expressjs.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![TMDB](https://img.shields.io/badge/Data-TMDB-01B4E4?logo=themoviedatabase&logoColor=white)](https://www.themoviedb.org/)
+[![MovieLens](https://img.shields.io/badge/Data-MovieLens-F5C518?logo=data&logoColor=white)](https://grouplens.org/datasets/movielens/)
 
 </div>
 
 ## Overview
 
-MoodFlix is a small full-stack application built around a simple idea: people often choose a film by how they feel, not by title, actor, or genre. The React client sends a free-text mood to an Express API. The API maps mood keywords to TMDB genres, discovers films in English, Hindi, Tamil, Telugu, and Marathi, and returns a separate popularity-ranked rail for each language. Selecting a film opens a detail view with its YouTube trailer and flat-rate streaming providers available in India.
+MoodFlix answers one question: *what should I watch given how I feel right now?*
 
-The recommendation logic is deterministic keyword matching plus TMDB popularity data. It is not a machine-learning model and does not send user text to an LLM.
+Describe your mood in free text — "heartbroken", "mind bending please", "cozy monsoon evening" — and a locally trained **FunkSVD matrix-factorization model** combined with a mood engine ranks the MovieLens film catalog for you. Every card explains *why* it was picked (mood match, your learned taste, community quality), and every star rating you leave **updates your personal taste vector live** — the model literally retrains as you rate.
+
+Accuracy is measured, not asserted: the `/api/model` endpoint reports held-out evaluation metrics computed on 10% of ratings the model never trained on.
+
+## Model Card
+
+| Metric | Value (held-out 10%) |
+| :--- | :---: |
+| RMSE | **0.870** |
+| MAE | **0.67** |
+| Precision@10 | **65.2%** (of top-10 predictions rated ≥ 4★) |
+| Ratings trained on | 90,753 |
+| Held-out ratings | 10,083 |
+| Latent factors | 16 |
+| Epochs (SGD) | 14 |
+| Learning rate / regularization | 0.008 / 0.06 |
+
+The prediction model is the classic FunkSVD formulation:
+
+```
+r̂(u,i) = μ + b_u + b_i + p_u · q_i
+```
+
+trained with plain SGD on the MovieLens ratings matrix.
 
 ## Key Features
 
-- **Mood-to-genre mapping.** A fixed mood dictionary maps terms such as `nostalgic`, `heartbroken`, `adventurous`, and `curious` to one or more TMDB genres.
-- **Five language rails.** Every search returns English, Hindi, Tamil, Telugu, and Marathi collections.
-- **Popularity-ranked results.** Each discover request pulls up to 20 pages of TMDB results, discards entries without posters, and sorts by popularity.
-- **Trending fallback.** If a language/genre combination yields fewer than 150 films, the backend blends in the week's trending films for that language.
-- **In-memory caching.** Genre lists, discover results, and trending results are cached for 30 minutes to reduce TMDB API traffic.
-- **Trailer and provider details.** The detail endpoint appends TMDB videos and watch-provider data, returning the first YouTube trailer and India flat-rate providers.
-- **Lightweight React UI.** A single-page client with a splash screen, horizontally scrollable rails, and a detail modal. No state-management or UI framework is required.
-
-## How Recommendations Work
-
-1. The client sends `{ "query": "<user text>" }` to `POST /search`.
-2. `detectMood()` lowercases the query and returns the genres of the **first** mood whose key appears as a substring. Keys are evaluated in object order.
-3. The mood's genre names are converted to TMDB genre IDs using `/genre/movie/list`.
-4. For each of `en`, `hi`, `ta`, `te`, and `mr`, the server requests 20 pages of `/discover/movie` filtered by original language and those genre IDs, sorted by `popularity.desc`.
-5. Results without a `poster_path` are removed. If fewer than 150 films remain for a language, up to three pages of `/trending/movie/week` for that language are appended.
-6. Each language array is sorted by popularity and returned. The client renders the first 30 items per rail.
-
-Because the query is only used for mood detection, arbitrary text such as an actor or film title does not perform a title search. If no mood keyword matches, the server returns popular films in each language without a genre filter.
+- **Real ML, not keyword matching.** A matrix-factorization recommender trained on 100,836 real MovieLens ratings runs entirely in Node.
+- **Mood engine.** A pure, unit-tested module maps free-form emotional input onto MovieLens genre weights with phrase matching, synonym groups, and negation handling ("not scary").
+- **Explainable scoring.** Every pick shows mood match, your taste match, and community quality — the ranking is never a black box.
+- **Live taste learning.** Star ratings take incremental SGD steps on your personal taste vector; `/api/profile` shows your learned genre affinities.
+- **Diversity re-ranking.** A genre-aware MMR pass prevents single-genre walls of recommendations.
+- **Similar by learned structure.** "More like this" uses cosine similarity in the model's latent item space, not TMDB keywords.
+- **Zero API keys.** IMDb deep-links from the MovieLens `links.csv`; gradient "posters" are generated deterministically from title hashes.
+- **Local persistence.** Favorites live in SQLite; a stable per-browser user id keeps your taste profile across visits.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     U[Browser]
-    C["React client<br/>Create React App"]
+    C["Vite + React 19 client"]
     S["Express API<br/>server.js"]
-    M[("In-memory cache<br/>30 minute TTL")]
-    T["TMDB API v3"]
+    MF["Matrix Factorization<br/>FunkSVD · 16 factors"]
+    ME["Mood engine<br/>lib/mood.js"]
+    D[("MovieLens CSVs<br/>data/ml-latest-small")]
+    DB[("favorites.db<br/>SQLite")]
 
     U --> C
-    C -->|"POST /search<br/>GET /movie/:id"| S
-    S --> M
-    M -->|"cache miss"| T
-    T -->|"genres, discover, trending, details"| S
-    S -->|"JSON rails or movie detail"| C
+    C -->|"/api/search, /api/rate"| S
+    S --> MF
+    S --> ME
+    MF --> D
+    ME --> MF
+    S --> DB
 ```
-
-The server is stateless apart from the module-level cache, so restarting it clears all cached TMDB responses.
 
 ## Tech Stack
 
 | Layer | Technology |
 | :--- | :--- |
-| Client | React 19, Create React App 5 (`react-scripts`), Axios |
-| Server | Node.js, Express 5, Axios, CORS, dotenv |
-| Data source | TMDB API v3 (metadata and images) |
-| Optional/local storage | SQLite 3 via the `sqlite3` dependency; `movies.db` and `favorites.db` exist locally but are not used by the current server |
-| Styling | Plain CSS in `client/src/App.css` |
-| Deployment | GitHub Pages configuration for the client; the client source currently points at a Render-hosted backend |
+| Client | React 19, Vite 6, Tailwind CSS 3, Axios |
+| Server | Node.js 18+, Express 5, CORS, compression, helmet |
+| ML core | Custom FunkSVD matrix factorization (`lib/recommender.js`) with SGD, bias terms, held-out evaluation, and MMR diversity re-ranking |
+| Dataset | [MovieLens ml-latest-small](https://grouplens.org/datasets/movielens/) — 9,742 movies, 100,836 ratings (GroupLens, auto-downloaded) |
+| Persistence | SQLite 3 (`favorites.db`) |
+| Tests | Node.js built-in test runner (`node --test`) |
 
 ## Project Structure
 
 ```text
 MoodFlix/
-├── server.js                 # Express API: /search and /movie/:id
-├── package.json              # Backend dependencies
-├── .env.example              # Required environment variables (template)
-├── movies.db                 # Local SQLite file (gitignored, not read by server.js)
-├── favorites.db              # Local SQLite file (gitignored, not read by server.js)
-├── build/                    # Legacy static build output (not served by server.js)
-└── client/
-    ├── package.json          # React scripts and GitHub Pages deployment
-    ├── public/               # CRA public assets
+├── server.js                 # Express API: search, recommend, rate, favorites, profile
+├── lib/
+│   ├── recommender.js        # ML core: FunkSVD training, scoring, diversity, eval
+│   ├── mood.js               # pure mood → genre-weights engine (unit tested)
+│   └── data.js               # MovieLens CSV parsing + Bayesian per-film stats
+├── scripts/
+│   └── prepare-data.js       # downloads & unpacks the MovieLens zip (run once)
+├── tests/                    # node --test suites for mood + recommender
+├── data/ml-latest-small/     # dataset (gitignored, created by data:prepare)
+├── favorites.db              # local favorites store (gitignored)
+└── client/                   # Vite + React 19 + Tailwind front end
+    ├── index.html
+    ├── vite.config.js        # base /MoodFlix/ for GitHub Pages
+    ├── tailwind.config.js
+    ├── postcss.config.js
     └── src/
-        ├── App.js            # Search, rails, and detail modal
-        ├── App.css           # Application styles
-        ├── App.test.js       # Default CRA smoke test
-        └── index.js          # React entry point
+        ├── App.jsx           # landing / results / profile wiring
+        ├── api.js            # API client + per-browser user id
+        └── components/       # Poster, MovieCard, MovieModal, ResultsStrip
 ```
 
 ## Prerequisites
 
-- **Node.js 18 or newer** and npm. Express 5 requires a current Node.js release.
-- A **TMDB API key** (v3 auth). Create an account and request a key from your [TMDB API settings](https://www.themoviedb.org/settings/api).
-- A modern browser.
+- **Node.js 18 or newer** and npm.
+- That's it. No API keys, no accounts.
 
 ## Setup
 
-### 1. Clone the repository
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/ishanvaidya01/MoodFlix.git
 cd MoodFlix
-```
-
-### 2. Install backend dependencies
-
-```bash
 npm install
 ```
 
-### 3. Configure the server environment
-
-Create `.env` in the repository root from the template:
+### 2. Fetch the dataset (once per machine)
 
 ```bash
-# macOS / Linux
-cp .env.example .env
-
-# Windows PowerShell
-Copy-Item .env.example .env
+npm run data:prepare
 ```
 
-Set `TMDB_KEY` to your own TMDB API key. Never commit `.env`.
+Downloads the ~1 MB MovieLens `ml-latest-small` zip from GroupLens and unpacks `movies.csv`, `ratings.csv`, and `links.csv` into `data/ml-latest-small/`. If your network blocks the download, grab the zip manually from the [MovieLens page](https://grouplens.org/datasets/movielens/) and place the three CSVs there yourself.
 
-### 4. Start the backend
+### 3. Start the API
 
 ```bash
-node server.js
+npm start
 ```
 
-The API listens on `http://localhost:5000` by default. There is no `start` script in the root `package.json`, so run the server file directly.
+On boot the server trains the model (~seconds, metrics logged) and serves `http://localhost:5000`.
 
-### 5. Install and start the client
+### 4. Start the client
 
 In a second terminal:
 
 ```bash
 cd client
 npm install
-npm start
+npm run dev
 ```
 
-The development server opens `http://localhost:3000`.
-
-### 6. Point the client at your local API for development
-
-The client does not read an environment variable for its API URL. The base URL is the `BACKEND` constant in `client/src/App.js`, currently set to a deployed Render service. To develop entirely locally, change that constant to `http://localhost:5000` (this is a source change and is not required to read this documentation). Restore or replace it with your own deployed API URL before building for production.
+Open `http://localhost:5173`. The client talks to `http://localhost:5000` by default (override with `VITE_API_URL`).
 
 ## Environment Variables
 
+Copy `.env.example` to `.env` if you want to override defaults. **Nothing is required** — the app runs with zero configuration.
+
 | Variable | Required | Default | Description |
 | :--- | :---: | :--- | :--- |
-| `TMDB_KEY` | Yes | — | TMDB API v3 key used by every backend TMDB request. The server exits at startup if it is missing. |
-| `PORT` | No | `5000` | HTTP port for the Express server. |
+| `PORT` | No | `5000` | HTTP port for the Express API. |
+| `MOODLENS_URL` | No | GroupLens URL | Alternate download URL for the dataset zip. |
+| `MOODFLIX_DATA_DIR` | No | `data/ml-latest-small` | Dataset location. |
+| `MF_FACTORS` | No | `16` | Latent factor count for the model. |
+| `MF_EPOCHS` | No | `14` | Training epochs. |
+| `MOODFLIX_DB` | No | `favorites.db` | SQLite favorites database path. |
 
-An existing local `.env` may contain other keys (for example `HF_KEY`), but the current code does not read them. Keep only variables the application uses and never commit the file.
+Client (in `client/`): `VITE_API_URL` (default `http://localhost:5000`), `VITE_BASE` (default `/MoodFlix/` — set to `/` for other static hosts).
 
-## Run Commands
+## API Endpoints
 
-| Location | Command | Purpose |
+All routes are prefixed with `/api`.
+
+| Method | Route | Description |
 | :--- | :--- | :--- |
-| Repository root | `npm install` | Install backend dependencies |
-| Repository root | `node server.js` | Start the API on port 5000 (or `PORT`) |
-| `client/` | `npm install` | Install client dependencies |
-| `client/` | `npm start` | Start the CRA development server on port 3000 |
-| `client/` | `npm run build` | Produce a production build in `client/build/` |
-| `client/` | `npm test` | Run the CRA/Jest test watcher |
-| `client/` | `npm run deploy` | Build and publish `client/build/` to GitHub Pages via `gh-pages` |
+| GET | `/api/health` | Liveness + dataset/model status |
+| GET | `/api/model` | Approach, hyperparameters, held-out RMSE/MAE/P@10 |
+| POST | `/api/search` | `{ query, userId? }` → mood-aware ranked results with `why[]` explanations |
+| GET | `/api/recommend` | Cold-start picks (no query needed) |
+| GET | `/api/movie/:id` | Details, IMDb URL, latent-space neighbors |
+| GET | `/api/moods` | Mood chips: ids, sample phrases, mapped genres |
+| POST | `/api/rate` | `{ movieId, rating, userId? }` → live SGD update of your taste vector |
+| GET | `/api/profile` | Top genre affinities learned for `userId` |
+| GET/POST | `/api/favorites` | List / add favorites (SQLite) |
+| DELETE | `/api/favorites/:id` | Remove a favorite |
 
-## Usage
-
-1. Open the client and wait for the splash screen to finish.
-2. Enter a mood phrase, for example `I feel nostalgic tonight`, and submit.
-3. Browse the English, Hindi, Tamil, Telugu, and Marathi rails. Use the arrow buttons to scroll a rail horizontally.
-4. Select a poster to load details. If TMDB has a YouTube trailer, it plays in the modal; the detail response also includes flat-rate watch providers for India.
-5. Change the text and search again to load a different mood.
-
-Example request:
+Example:
 
 ```bash
-curl -X POST http://localhost:5000/search \
+curl -X POST http://localhost:5000/api/search \
   -H "Content-Type: application/json" \
   -d "{\"query\":\"feeling adventurous\"}"
 ```
 
-## API Endpoints
-
-### `POST /search`
-
-Accepts a JSON body with a `query` string and returns five arrays.
-
-**Request body**
-
-```json
-{
-  "query": "feeling adventurous"
-}
-```
-
-**Response shape**
-
-```json
-{
-  "english": [{ "id": 0, "title": "Example", "poster_path": "/example.jpg", "popularity": 123.4 }],
-  "hindi": [],
-  "tamil": [],
-  "telugu": [],
-  "marathi": []
-}
-```
-
-The objects are the standard TMDB movie-list fields; the example above is abbreviated. On an upstream failure the endpoint returns `500` with `{ "error": "Search failed" }`.
-
-### `GET /movie/:id`
-
-Returns TMDB movie details with two additions:
-
-- `trailerKey` — the YouTube key of the first result whose `type` is `Trailer` and `site` is `YouTube`, or `null`.
-- `providers` — the `flatrate` watch providers for the `IN` (India) region, or an empty array.
-
-TMDB requests append `videos` and `watch/providers`. On failure the endpoint returns `500` with `{ "error": "Details failed" }`.
-
-There is no health, authentication, or favorites endpoint in the current server.
-
-## Data and Local SQLite Files
-
-`movies.db` and `favorites.db` are local SQLite files that are ignored by Git. Both contain a `favorites` table, suggesting they were created for an earlier favorites experiment. **The current `server.js` does not open either database and no API route depends on them.** They are not required to run MoodFlix and can be kept as local artifacts or removed from a working copy without affecting the application.
-
-The root `build/` directory and `client/build/` contain generated static assets from earlier builds. The Express server does not serve them; use `cd client && npm start` for development or `cd client && npm run build` to rebuild the client.
-
 ## Testing
 
-There is no configured backend test suite. The root `npm test` script is a placeholder that prints an error and exits with status 1, so it is not a useful verification step. The client includes the default Create React App smoke test:
-
 ```bash
-cd client
-npm test
+npm test          # runs node --test over tests/
 ```
 
-No lint script is defined in either package.
+Covers mood phrase matching, negation suppression, MF convergence (sub-0.9 RMSE on a synthetic set), ranked-list shape with explanations, genre diversity, taste-profile shifts from ratings, and similarity ordering.
 
 ## Deployment
 
-- **Client:** `client/package.json` declares the GitHub Pages homepage `https://ishanvaidya01.github.io/MoodFlix` and uses `gh-pages` in a `deploy` script. After setting the client's `BACKEND` constant to a reachable API, run `cd client && npm run deploy`. The `predeploy` hook builds the app first.
-- **Backend:** there is no Dockerfile, Procfile, or platform configuration in the repository. The checked-in client currently points at `https://moodflix-backend-kztp.onrender.com`, which implies a Render deployment, but the deployment configuration is not part of this repo. Deploy `server.js` to any Node.js host, set `TMDB_KEY`, and update the client's `BACKEND` constant to that URL.
-
-CORS is currently enabled for all origins. Add origin restrictions and rate limiting before exposing the API as a public production service.
+- **Client:** `client/package.json` declares the GitHub Pages homepage and a `deploy` script: `cd client && npm run deploy`. `vite.config.js` sets `base: '/MoodFlix/'` for project pages; set `VITE_BASE=/` when hosting elsewhere.
+- **Backend:** runs anywhere Node 18+ does — `npm start`. No external services required. (GitHub Pages hosts only the static client; keep the API local.)
 
 ## Limitations and Disclaimers
 
-- Mood detection is keyword matching, not sentiment analysis. Only the first matching key wins, and multi-mood phrases are reduced to one genre set.
-- Search text is not used for title, cast, or keyword lookup.
-- Each request can make up to 100 TMDB discover calls (20 pages × 5 languages) plus trending calls on a cache miss. The 30-minute cache limits repeated traffic but not the first request.
-- Trending results are appended without deduplication, so a title can appear more than once in a rail.
-- Watch providers are fetched only for India. Availability changes and is controlled by TMDB/JustWatch.
-- There is no authentication, user account, database-backed favorites feature, or server-side persistence in the current code.
+- The film catalog is the MovieLens `ml-latest-small` collection (~9,700 films), so very recent or niche titles are not included.
+- Personality: recommendations are shaped by aggregated crowd ratings plus your local ratings; a brand-new profile starts semi-cold and sharpens after a handful of ratings.
+- Rate limiting (simple fixed window) is enabled; CORS is open to all origins by design because the app is meant to run locally.
 
-**TMDB attribution:** This product uses the TMDB API but is not endorsed or certified by TMDB. Movie metadata and images are supplied by [The Movie Database](https://www.themoviedb.org/). Review TMDB's terms before deploying publicly.
+**Dataset attribution:** This product uses the MovieLens dataset collected by the [GroupLens Research Project](https://grouplens.org/datasets/movielens/) at the University of Minnesota. It is not endorsed or certified by GroupLens. IMDb links are constructed from dataset `links.csv`; IMDb is not affiliated with this project.
 
 ## Contributing
 

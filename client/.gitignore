@@ -5,10 +5,9 @@
 /.pnp
 .pnp.js
 
-# testing
-/coverage
-
-# production
+# build output (Vite)
+/dist
+# (legacy CRA)
 /build
 
 # misc

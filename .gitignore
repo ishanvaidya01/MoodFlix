@@ -1,6 +1,20 @@
 node_modules
 .env
+
+# local databases
 favorites.db
 movies.db
+model.json
+
+# dataset (auto-downloaded by scripts/prepare-data.js)
+data/
+
+# old worktrees / build output
+build/
 client/node_modules
 client/build
+client/dist
+
+# misc
+*.log
+.DS_Store
